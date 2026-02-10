@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
@@ -39,7 +39,10 @@ const CreateInterviewAgent = ({
     isListening: false,
     userId: userId || "MISSING",
     voiceMode: "SIMULATED" as "REAL" | "SIMULATED",
-    generatedInterviewId: ""
+    generatedInterviewId: "",
+    fromCache: false,
+    cacheUsageCount: 0,
+    cacheRating: 0
   });
 
   const voiceAssistantRef = useRef<any>(null);
@@ -52,12 +55,12 @@ const CreateInterviewAgent = ({
   const configQuestions = [
     {
       id: "role",
-      question: "What role are you interviewing for? For example: Frontend Developer, Backend Engineer, or Product Manager.",
+      question: "What role are do you want interviewing for? For example:  lawyer,  teacher,  or  shoe maker.",
       parse: (answer: string) => answer
     },
     {
       id: "level",
-      question: "What experience level? For example: Junior, Mid-level, or Senior.",
+      question: "and What is your experience level in this ? For example: Junior, Mid-level, or Senior.",
       parse: (answer: string) => {
         if (answer.toLowerCase().includes("junior")) return "Junior";
         if (answer.toLowerCase().includes("senior")) return "Senior";
@@ -67,12 +70,12 @@ const CreateInterviewAgent = ({
     },
     {
       id: "techstack",
-      question: "What technologies or skills should we focus on? For example: React, TypeScript, Node.js.",
+      question: "therefore What technologies or skills should we focus on? For example: React, TypeScript, Node.js.",
       parse: (answer: string) => answer
     },
     {
       id: "type",
-      question: "What type of interview? Technical, behavioral, or mixed?",
+      question: "if  i may  ask. What  type  of  interview should we focus on? Technical,  behavioral, or  mixed?",
       parse: (answer: string) => {
         if (answer.toLowerCase().includes("behavioral")) return "Behavioral";
         if (answer.toLowerCase().includes("mixed")) return "Mixed";
@@ -81,7 +84,7 @@ const CreateInterviewAgent = ({
     },
     {
       id: "amount",
-      question: "How many questions would you like? 3, 5, or 10?",
+      question: "in that case How many questions would you like? 3,  5, or  10?",
       parse: (answer: string) => {
         const num = parseInt(answer);
         if ([3, 5, 10].includes(num)) return num;
@@ -331,13 +334,16 @@ const CreateInterviewAgent = ({
       ...prev,
       callStatus: "CONFIGURING",
       currentQuestion: 0,
-      generatedInterviewId: ""
+      generatedInterviewId: "",
+      fromCache: false,
+      cacheUsageCount: 0,
+      cacheRating: 0
     }));
 
     await voiceAssistantRef.current.speak(
       "Welcome! I'll help you create interview and practice for job you are applying for. " +
-      "First, I need to ask you a few questions . " +
-      "Please speak clearly after each question."
+      "First i congratulate you for reaching this fur, above all  I need to ask you a few questions  i hope it is ok with you. " +
+      "and Please speak clearly after each question."
     );
 
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -374,8 +380,8 @@ const CreateInterviewAgent = ({
     setDebugInfo(prev => ({ ...prev, callStatus: "GENERATING" }));
 
     await voiceAssistantRef.current.speak(
-      `Thank you for your answers! Based on your preferences, I'm now generating your interview questions. ` +
-      `You'll be interviewing for a ${userConfig.level} ${userConfig.role} position. ` +
+      `oooo!such amazing answers you are having ! let me say Based on your preferences, I'm now generating your interview questions. ` +
+      `and You'll be interviewing for what you choosed if am not wrong it is a ${userConfig.level} ${userConfig.role} position. ` +
       `Please wait a moment while I create the questions.`
     );
 
@@ -387,7 +393,9 @@ const CreateInterviewAgent = ({
     }
 
     try {
-      const response = await fetch("/api/vapi/generate", {
+      console.log("📞 Calling generate-with-cache API...");
+
+      const response = await fetch("/api/vapi/generate-with-cache", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -396,22 +404,67 @@ const CreateInterviewAgent = ({
         })
       });
 
-      const data = await response.json();
+      // First, check if the response is OK
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Server returned error:", response.status, errorText);
+        throw new Error(`Server error ${response.status}: ${response.statusText}`);
+      }
 
-      if (data.success && data.questions && data.interviewId) {
+      // Try to parse as JSON
+      let data;
+      try {
+        const text = await response.text();
+        console.log("📥 Raw API response:", text.substring(0, 200));
+
+        if (!text || text.trim() === '') {
+          throw new Error("Empty response from server");
+        }
+
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error("❌ Failed to parse JSON:", parseError);
+        throw new Error("Invalid JSON response from server");
+      }
+
+      // Check if data exists and has the expected structure
+      if (!data) {
+        throw new Error("No data received from server");
+      }
+
+      // Check for success and questions
+      if (data.success && Array.isArray(data.questions) && data.questions.length > 0 && data.interviewId) {
+        console.log(`✅ Got ${data.questions.length} questions from API`);
+
+        // Set cache info
         setDebugInfo(prev => ({
           ...prev,
           generatedInterviewId: data.interviewId,
           totalQuestions: data.questions.length,
-          callStatus: "REDIRECTING"
+          callStatus: "REDIRECTING",
+          fromCache: data.fromCache || false,
+          cacheUsageCount: data.cacheStats?.usageCount || 0,
+          cacheRating: data.cacheStats?.rating || 0
         }));
 
-        await voiceAssistantRef.current.speak(
-          `Perfect! I've generated ${data.questions.length} interview questions. ` +
-          `I'll now redirect you to the interview practice page where you can answer them one by one.`
-        );
-
-        toast.success(`✅ Generated ${data.questions.length} questions! Redirecting...`);
+        // Custom voice message based on cache status
+        if (data.fromCache) {
+          await voiceAssistantRef.current.speak(
+            `let me found what we have in store.wow! I found ${data.questions.length} pre-generated interview questions in our cache. ` +
+            `and These questions have been used ${data.cacheStats?.usageCount || 0} times by other users. ` +
+            `I'll now redirect you to the interview practice page have a nice time wont you.`
+          );
+          console.log(`🎯 Using cached questions (Used ${data.cacheStats?.usageCount || 0} times)`);
+          toast.success(`📚 CACHE HIT! Using cached questions (${data.cacheStats?.usageCount || 0} uses)`);
+        } else {
+          await voiceAssistantRef.current.speak(
+            `wow! I've generated ${data.questions.length} new interview questions for you . ` +
+            `and I've saved them to our cache for future users. ` +
+            `I am now redirect you to the interview practice page where you can answer them one by one.`
+          );
+          console.log(`🔄 Generated new questions and cached them`);
+          toast.success(`✅ Generated ${data.questions.length} new questions!`);
+        }
 
         // Redirect to interview practice page after a delay
         setTimeout(() => {
@@ -425,14 +478,23 @@ const CreateInterviewAgent = ({
         setCurrentStep("redirecting");
 
       } else {
-        throw new Error(data.error || "Failed to generate questions");
+        // Handle error from API
+        const errorMessage = data.error ||
+                            (data.questions && data.questions.length === 0 ? "No questions generated" :
+                            !data.interviewId ? "No interview ID received" :
+                            "Failed to generate questions");
+        console.error("❌ API returned error:", errorMessage, data);
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
-      console.error("Error generating interview:", error);
-      await voiceAssistantRef.current.speak(
+      console.error("❌ Error generating interview:", error);
+
+      // Show error to user
+      await voiceAssistantRef.current?.speak(
         "Sorry, there was an error generating your interview questions. Please try again."
       );
-      toast.error(`❌ ${error.message}`);
+
+      toast.error(`❌ ${error.message || "Unknown error occurred"}`);
       setCurrentStep("error");
       setDebugInfo(prev => ({ ...prev, callStatus: "ERROR" }));
     } finally {
@@ -447,7 +509,7 @@ const CreateInterviewAgent = ({
     toast.info("Setup stopped");
   };
 
-  // NEW: Submit answer function
+  // Submit answer function
   const submitAnswer = () => {
     if (userTranscript.trim()) {
       processAnswer(userTranscript);
@@ -537,8 +599,30 @@ const CreateInterviewAgent = ({
           <p>• I will ask you 5 configuration questions</p>
           <p>• I'll generate personalized interview questions</p>
           <p>• You'll be redirected to practice answering them</p>
+          <p className="text-green-600 font-medium">• Smart caching saves AI costs!</p>
         </div>
       </div>
+
+      {/* Cache Status Display */}
+      {debugInfo.fromCache && (
+        <div className="border border-green-200 bg-green-50 rounded-xl p-4 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <span className="text-green-600 text-xl">📚</span>
+            </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-green-800">Using Cached Questions!</h4>
+              <p className="text-sm text-green-600">
+                These questions have been used <span className="font-bold">{debugInfo.cacheUsageCount}</span> times
+                {debugInfo.cacheRating > 0 && ` • Rated ${debugInfo.cacheRating.toFixed(1)}/5 ⭐`}
+              </p>
+              <p className="text-xs text-green-500 mt-1">
+                (Instant loading • Saved AI costs • Community-tested)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Current Configuration Status */}
       {currentStep === "configuring" && (
@@ -607,10 +691,16 @@ const CreateInterviewAgent = ({
               <div className="font-medium">{userConfig.amount}</div>
             </div>
             <div className="bg-white p-3 rounded-lg border border-purple-100">
-              <div className="text-xs text-purple-600">Status</div>
-              <div className="font-medium">{currentStep === "configuring" ? "Configuring" :
-                                          currentStep === "generating" ? "Generating" :
-                                          currentStep === "redirecting" ? "Redirecting" : "Ready"}</div>
+              <div className="text-xs text-purple-600">Cache Status</div>
+              <div className="font-medium">
+                {debugInfo.fromCache ? (
+                  <span className="text-green-600">📚 Cached ({debugInfo.cacheUsageCount} uses)</span>
+                ) : currentStep === "generating" ? (
+                  <span className="text-blue-600">🔄 Generating...</span>
+                ) : (
+                  <span className="text-gray-600">Not generated yet</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -645,9 +735,12 @@ const CreateInterviewAgent = ({
           </div>
 
           <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="text-sm text-gray-500">Questions</div>
-            <div className="font-bold text-gray-800">
-              {userConfig.amount}
+            <div className="text-sm text-gray-500">Cache</div>
+            <div className={`font-bold ${
+              debugInfo.fromCache ? 'text-green-600' :
+              currentStep === "generating" ? 'text-blue-600' : 'text-gray-600'
+            }`}>
+              {debugInfo.fromCache ? "HIT" : currentStep === "generating" ? "MISS" : "N/A"}
             </div>
           </div>
         </div>
@@ -712,7 +805,7 @@ const CreateInterviewAgent = ({
             </button>
           )}
 
-          {/* NEW: Submit Answer Button */}
+          {/* Submit Answer Button */}
           {currentStep === "configuring" && userTranscript && (
             <button
               onClick={submitAnswer}
@@ -757,7 +850,9 @@ const CreateInterviewAgent = ({
                   {userConfig.amount} questions generated for {userConfig.level} {userConfig.role}
                 </p>
                 <p className="text-green-600 text-xs mt-1">
-                  Redirecting to practice page...
+                  {debugInfo.fromCache ?
+                    "📚 Using cached questions (instant loading)" :
+                    "🔄 Generated new questions (saved to cache for future users)"}
                 </p>
               </div>
               <div className="animate-pulse">
@@ -790,7 +885,7 @@ const CreateInterviewAgent = ({
                 : currentStep === "configuring"
                 ? `Asking configuration question ${debugInfo.currentQuestion} of 5`
                 : currentStep === "generating"
-                ? "Generating personalized interview questions..."
+                ? `Generating ${debugInfo.fromCache ? "cached" : "new"} interview questions...`
                 : currentStep === "redirecting"
                 ? "Redirecting you to practice the interview..."
                 : "Error occurred"}
@@ -832,17 +927,15 @@ const CreateInterviewAgent = ({
                 : currentStep === "configuring"
                 ? "🎤 Speak your answer, then click Submit Answer"
                 : currentStep === "generating"
-                ? "Please wait while I generate your interview..."
+                ? `Please wait while I ${debugInfo.fromCache ? "retrieve cached" : "generate new"} questions...`
                 : currentStep === "redirecting"
                 ? "✅ Interview created! Redirecting to practice..."
                 : "Please try again"}
             </p>
-            {currentStep === "configuring" && (
-              <div className="mt-2 text-sm text-gray-500">
-                <p>• Speak clearly into your microphone</p>
-                <p>• Click <span className="font-medium text-green-600">Submit Answer</span> to continue</p>
-                <p>• Click <span className="font-medium text-yellow-600">Skip Question</span> to use default value</p>
-              </div>
+            {debugInfo.fromCache && (
+              <p className="text-sm text-green-600 mt-2">
+                🎉 You're saving AI costs by using cached questions!
+              </p>
             )}
           </div>
         </div>
@@ -856,31 +949,25 @@ const CreateInterviewAgent = ({
           <li><span className="font-medium">Click Start Voice Setup</span></li>
           <li><span className="font-medium">Answer 5 configuration questions</span> by voice</li>
           <li><span className="font-medium">Click Submit Answer</span> after each response</li>
-          <li><span className="font-medium">I generate personalized interview questions</span></li>
+          <li><span className="font-medium">I check cache first</span> (saves money and time!)</li>
+          <li><span className="font-medium">Generate or retrieve questions</span></li>
           <li><span className="font-medium">You'll be redirected to practice</span> answering the questions</li>
         </ol>
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-          <p className="font-medium text-blue-800">🎯 Submit Button Guide:</p>
+        <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-sm">
+          <p className="font-medium text-green-800">💰 Cost Savings with Cache:</p>
           <div className="grid grid-cols-1 gap-2 mt-2">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-500 text-white rounded-lg flex items-center justify-center text-sm">✅</div>
+              <div className="w-8 h-8 bg-green-500 text-white rounded-lg flex items-center justify-center text-sm">📚</div>
               <div>
-                <p className="font-medium text-blue-800">Submit Answer</p>
-                <p className="text-blue-600 text-xs">Click this button after speaking to submit your answer and move to the next question</p>
+                <p className="font-medium text-green-800">Cache Hit</p>
+                <p className="text-green-600 text-xs">Questions already exist → Instant loading, zero AI cost</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-yellow-500 text-white rounded-lg flex items-center justify-center text-sm">⏭️</div>
+              <div className="w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center text-sm">🔄</div>
               <div>
-                <p className="font-medium text-blue-800">Skip Question</p>
-                <p className="text-blue-600 text-xs">Use this if you want to skip the current question</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-red-500 text-white rounded-lg flex items-center justify-center text-sm">🛑</div>
-              <div>
-                <p className="font-medium text-blue-800">Stop Setup</p>
-                <p className="text-blue-600 text-xs">Cancel the interview creation process</p>
+                <p className="font-medium text-green-800">Cache Miss</p>
+                <p className="text-green-600 text-xs">Generate new questions → Save to cache for future users</p>
               </div>
             </div>
           </div>

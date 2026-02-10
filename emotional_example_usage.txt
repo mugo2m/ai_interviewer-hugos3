@@ -1,0 +1,28 @@
+﻿// 🧠 EXAMPLE USAGE in memoryService.ts
+// Add this function to start using emotional memory
+
+async function recordInterviewEmotion(userId, sessionData) {
+  try {
+    // Record emotional state from interview
+    await recordEmotionalState(userId, {
+      emotion: sessionData.emotion || 'neutral',
+      intensity: sessionData.emotionalIntensity || 5,
+      context: 'Interview session',
+      metadata: {
+        sessionId: sessionData.sessionId,
+        interviewType: sessionData.interviewType,
+        score: sessionData.score,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+    // Get emotional wellness score
+    const wellness = await calculateEmotionalWellness(userId);
+    console.log(`📊 Emotional wellness for ${userId}: ${wellness.overallScore}`);
+    
+    return wellness;
+  } catch (error) {
+    console.error('❌ Emotional recording failed:', error);
+    return null;
+  }
+}

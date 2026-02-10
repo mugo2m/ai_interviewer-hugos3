@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 
-// FIX: Prevent caching - feedback shows immediately
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -34,7 +33,7 @@ async function pollFeedback(interviewId: string, userId: string, maxAttempts = 2
     // Wait 3 seconds before next attempt - CHANGED: 13s → 3s
     if (attempt < maxAttempts) {
       console.log(`⏳ [pollFeedback] No feedback yet, waiting 3 seconds...`);
-      await new Promise(resolve => setTimeout(resolve, 3000)); // CHANGED: 13000 → 3000
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
 
@@ -42,11 +41,19 @@ async function pollFeedback(interviewId: string, userId: string, maxAttempts = 2
   return null;
 }
 
-const Feedback = async ({ params }: RouteParams) => {
-  const { id } = await params;
-  const user = await getCurrentUser();
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  // Await the params
+  const params = await props.params;
+  const { id } = params;
 
-  console.log("🔍 [Feedback Page] Starting, interview ID:", id);
+  if (!id) {
+    console.error("❌ No interview ID in params:", params);
+    redirect("/");
+  }
+
+  console.log("✅ Page params received:", { id });
+
+  const user = await getCurrentUser();
   console.log("🔍 [Feedback Page] User ID:", user?.id);
 
   const interview = await getInterviewById(id);
@@ -93,7 +100,6 @@ const Feedback = async ({ params }: RouteParams) => {
             </div>
           </div>
 
-          {/* Loading animation */}
           <div className="flex flex-col items-center gap-4">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-200"></div>
             <p className="text-gray-600 text-center max-w-md">
@@ -111,7 +117,6 @@ const Feedback = async ({ params }: RouteParams) => {
               </Link>
             </Button>
 
-            {/* Simple refresh button */}
             <form action={async () => {
               'use server';
               redirect(`/interview/${id}/feedback`);
@@ -143,7 +148,6 @@ const Feedback = async ({ params }: RouteParams) => {
 
       <div className="flex flex-row justify-center ">
         <div className="flex flex-row gap-5">
-          {/* Overall Impression */}
           <div className="flex flex-row gap-2 items-center">
             <Image src="/star.svg" width={22} height={22} alt="star" />
             <p>
@@ -155,7 +159,6 @@ const Feedback = async ({ params }: RouteParams) => {
             </p>
           </div>
 
-          {/* Date */}
           <div className="flex flex-row gap-2">
             <Image src="/calendar.svg" width={22} height={22} alt="calendar" />
             <p>
@@ -171,7 +174,6 @@ const Feedback = async ({ params }: RouteParams) => {
 
       <p>{feedback?.finalAssessment || "No final assessment available."}</p>
 
-      {/* Interview Breakdown */}
       <div className="flex flex-col gap-4">
         <h2>Breakdown of the Interview:</h2>
         {feedback?.categoryScores?.length > 0 ? (
@@ -236,6 +238,4 @@ const Feedback = async ({ params }: RouteParams) => {
       </div>
     </section>
   );
-};
-
-export default Feedback;
+}

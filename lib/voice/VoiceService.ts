@@ -1,4 +1,4 @@
-// lib/voice/VoiceService.ts - SIMPLE WORKING VERSION
+// lib/voice/VoiceService.ts - UPDATED WITH HUMANIZATION
 "use client";
 
 import { toast } from "sonner";
@@ -44,6 +44,7 @@ export class VoiceService {
   private interviewQuestions: string[] = [];
   private currentQuestionIndex: number = 0;
   private isActive: boolean = false;
+  private useHumanization: boolean = true; // Humanization enabled by default
 
   private speechToText: SpeechToText | null = null;
   private textToSpeech: TextToSpeech | null = null;
@@ -63,16 +64,62 @@ export class VoiceService {
     this.speechToText = new SpeechToText();
     this.textToSpeech = new TextToSpeech({
       language: config.language || 'en-US',
-      rate: config.speechRate || 1.0,
-      volume: config.speechVolume || 1.0,
-      pitch: 1.0
+      rate: config.speechRate || 0.9,  // CHANGED: Slower default
+      volume: config.speechVolume || 0.9, // CHANGED: Not too loud
+      pitch: 1.05  // CHANGED: Slightly higher for engagement
     });
 
     // Setup speech-to-text callbacks
     if (this.speechToText) {
       this.speechToText.onTranscript(this.handleUserTranscript.bind(this));
       this.speechToText.setLanguage(config.language || 'en-US');
+      this.speechToText.setInterviewMode(true); // Enable interview mode
     }
+  }
+
+  // ============ HUMANIZATION METHODS ============
+
+  private humanizeInterviewQuestion(text: string): string {
+    if (!this.useHumanization) return text;
+
+    // Add professional pacing to interview questions
+    let humanized = text
+      .replace(/Question \d+\. /g, (match) => {
+        // Add variation to question numbers
+        const variations = ['Next question. ', 'Moving on. ', 'Alright. ', 'Great. '];
+        const variation = variations[Math.floor(Math.random() * variations.length)];
+        return `${variation}${match}`;
+      })
+      .replace(/\. /g, '. ... ')      // Pause after sentences
+      .replace(/\?/g, '? ... ')       // Pause after questions
+      .replace(/, /g, ', ... ')       // Pause after commas
+      .replace(/:/g, ': ... ');       // Pause after colons
+
+    // Add interview-specific naturalizers
+    if (humanized.includes('Can you') && !humanized.includes('...')) {
+      humanized = humanized.replace('Can you', 'Now... can you');
+    }
+    if (humanized.includes('Tell me') && !humanized.includes('...')) {
+      humanized = humanized.replace('Tell me', 'Alright... tell me');
+    }
+
+    // Add thinking sounds occasionally
+    if (Math.random() > 0.8) {
+      const thinkingSounds = ['Hmm... ', 'Well... ', 'Let me see... '];
+      const sound = thinkingSounds[Math.floor(Math.random() * thinkingSounds.length)];
+      humanized = sound + humanized;
+    }
+
+    console.log("🎭 VoiceService: Humanized question:", humanized.substring(0, 80) + "...");
+    return humanized;
+  }
+
+  setHumanization(enabled: boolean): void {
+    this.useHumanization = enabled;
+    if (this.textToSpeech) {
+      this.textToSpeech.setHumanization(enabled);
+    }
+    console.log("🎭 VoiceService: Humanization", enabled ? "enabled" : "disabled");
   }
 
   public setInterviewQuestions(questions: string[]): void {
@@ -103,7 +150,7 @@ export class VoiceService {
     this.updateState({ isProcessing: true });
 
     try {
-      await this.speak("Interview starting. I will ask questions and wait for your answers.");
+      await this.speak("Interview starting... I will ask questions... and wait for your answers.");
       await this.delay(1000);
       await this.askCurrentQuestion();
 
@@ -141,9 +188,10 @@ export class VoiceService {
     this.messages.push(questionMessage);
     this.onUpdateCallback?.(this.messages);
 
-    // Speak question
-    await this.speak(`Question ${this.currentQuestionIndex + 1}. ${question}`);
-    await this.speak("When ready, click Submit Answer.");
+    // Speak question with humanization
+    const humanizedQuestion = this.humanizeInterviewQuestion(`Question ${this.currentQuestionIndex + 1}. ${question}`);
+    await this.speak(humanizedQuestion);
+    await this.speak("When ready... click Submit Answer.");
 
     // Start listening
     await this.startListening();
@@ -225,8 +273,8 @@ export class VoiceService {
 
     toast.success(`? Answer ${this.currentQuestionIndex + 1} submitted!`);
 
-    // Acknowledge
-    await this.speak("Thank you for your answer.");
+    // Acknowledge with humanization
+    await this.speak("Thank you for your answer...");
     await this.delay(1000);
 
     // Move to next question
@@ -263,7 +311,7 @@ export class VoiceService {
     toast.info(`?? Question ${this.currentQuestionIndex + 1} skipped`);
 
     // Acknowledge
-    await this.speak("Question skipped.");
+    await this.speak("Question skipped...");
     await this.delay(1000);
 
     // Move to next question
@@ -293,7 +341,7 @@ export class VoiceService {
       isProcessing: true
     });
 
-    await this.speak("Interview completed. Redirecting to feedback...");
+    await this.speak("Interview completed... Redirecting to feedback...");
 
     try {
       // Prepare completion data

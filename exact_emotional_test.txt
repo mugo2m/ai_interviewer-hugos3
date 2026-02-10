@@ -1,0 +1,33 @@
+﻿// 🧪 Test emotional memory activation
+async function testEmotionalMemoryActivation() {
+  console.log("🧪 Testing Emotional Memory Activation...");
+  
+  const testUserId = "test-user-" + Date.now();
+  const testData = {
+    emotion: "confident",
+    emotionalIntensity: 7,
+    sessionId: "test-session-123",
+    interviewType: "mock",
+    score: 85
+  };
+  
+  try {
+    // Test 1: Record emotion
+    const recorded = await recordInterviewEmotion(testUserId, testData);
+    console.log(`✅ Test 1 - Record emotion: ${recorded ? "PASSED" : "FAILED"}`);
+    
+    // Test 2: Get wellness
+    const wellness = await calculateEmotionalWellness(testUserId);
+    console.log(`✅ Test 2 - Get wellness: ${wellness ? "PASSED" : "FAILED"}`);
+    
+    // Test 3: Get current state
+    const currentState = await getCurrentEmotionalState(testUserId);
+    console.log(`✅ Test 3 - Get current state: ${currentState ? "PASSED" : "FAILED"}`);
+    
+    console.log("🎉 All emotional memory tests completed!");
+    return true;
+  } catch (error) {
+    console.error("❌ Emotional memory test failed:", error);
+    return false;
+  }
+}

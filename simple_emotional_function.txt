@@ -1,0 +1,27 @@
+﻿// 🧠 Simple emotional memory integration
+async function useEmotionalMemory(userId: string, context: string = "general") {
+  try {
+    // Record a basic emotional state
+    await recordEmotionalState(userId, {
+      emotion: "engaged",
+      intensity: 6,
+      context: context,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Get current emotional wellness
+    const wellness = await calculateEmotionalWellness(userId);
+    
+    return {
+      success: true,
+      wellnessScore: wellness?.overallScore || 0,
+      message: "Emotional memory recorded successfully"
+    };
+  } catch (error) {
+    console.error("Emotional memory error:", error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}

@@ -1,0 +1,16 @@
+﻿// Test cache with identical transcripts
+const transcript1 = [
+  { role: "assistant", content: "What are the basic types of wood joints?" },
+  { role: "user", content: "The basic types include butt joints, miter joints, dovetail joints, and mortise and tenon joints." },
+  { role: "assistant", content: "Explain what a dovetail joint is." },
+  { role: "user", content: "A dovetail joint is a woodworking joint that is known for its resistance to being pulled apart." },
+  { role: "assistant", content: "What tools are essential for joinery?" },
+  { role: "user", content: "Essential tools include a saw, chisel, mallet, marking gauge, and a plane." },
+  { role: "assistant", content: "How do you ensure a tight fit in joinery?" },
+  { role: "user", content: "You ensure a tight fit by accurate measuring, marking, and careful cutting, followed by test fitting." },
+  { role: "assistant", content: "What is the difference between hardwood and softwood?" },
+  { role: "user", content: "Hardwood comes from deciduous trees and is generally denser, while softwood comes from coniferous trees and is easier to work with." }
+];
+
+console.log("Test transcript has", transcript1.length, "messages");
+console.log("Use EXACTLY this transcript to test cache!");

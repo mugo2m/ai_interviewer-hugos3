@@ -1,4 +1,4 @@
-// lib/voice/VoiceAssistant.ts - UPDATED SIMPLIFIED WORKING VERSION
+// lib/voice/VoiceAssistant.ts - UPDATED WITH HUMANIZATION
 "use client";
 
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ export class VoiceAssistant {
   private userId: string | null = null;
   private isActive: boolean = false;
   private useSimulatedVoice: boolean = false;
+  private useHumanizedVoice: boolean = true; // Humanization enabled by default
 
   private onStateChangeCallback: ((state: VoiceState) => void) | null = null;
   private onUpdateCallback: ((messages: VoiceMessage[]) => void) | null = null;
@@ -59,10 +60,49 @@ export class VoiceAssistant {
     }
   }
 
+  // ============ HUMANIZATION METHODS ============
+
+  private humanizeSetupQuestion(text: string): string {
+    if (!this.useHumanizedVoice) return text;
+
+    // Add thoughtful pauses for interview setup
+    let humanized = text
+      .replace(/\. /g, '. ... ')      // Pause after sentences
+      .replace(/\?/g, '? ... ')       // Pause after questions
+      .replace(/, /g, ', ... ')       // Pause after commas
+      .replace(/:/g, ': ... ');       // Pause after colons
+
+    // Add interview setup cues
+    const setupCues = ['Alright. ', 'Great. ', 'Perfect. ', 'Excellent. '];
+    if (Math.random() > 0.7 && text.toLowerCase().includes('interview')) {
+      const cue = setupCues[Math.floor(Math.random() * setupCues.length)];
+      humanized = cue + humanized;
+    }
+
+    // Add setup-specific natural language
+    if (text.includes('type of interview')) {
+      humanized = humanized.replace('What type', 'First, what type');
+    } else if (text.includes('experience level')) {
+      humanized = humanized.replace('What is', 'Next, what is');
+    } else if (text.includes('technologies')) {
+      humanized = humanized.replace('What technologies', 'Great, and what technologies');
+    } else if (text.includes('How many questions')) {
+      humanized = humanized.replace('How many', 'Finally, how many');
+    }
+
+    return humanized;
+  }
+
+  setHumanization(enabled: boolean): void {
+    this.useHumanizedVoice = enabled;
+    console.log("🎭 VoiceAssistant: Humanization", enabled ? "enabled" : "disabled");
+  }
+
   async start(userId: string): Promise<void> {
     console.log("=== VOICEASSISTANT START ===");
     console.log("UserId:", userId);
     console.log("Using simulated voice:", this.useSimulatedVoice);
+    console.log("Humanization:", this.useHumanizedVoice ? "enabled" : "disabled");
 
     this.userId = userId;
     this.isActive = true;
@@ -72,9 +112,9 @@ export class VoiceAssistant {
     this.updateState({ isProcessing: true });
 
     try {
-      // Welcome message
+      // Welcome message with humanization
       console.log("Step 1: Speaking welcome message");
-      await this.speak("Welcome to interview setup. I will help you create a custom interview.");
+      await this.speak("Welcome to interview setup... I will help you create a custom interview.");
       console.log("✅ Welcome message spoken");
 
       // Wait a moment
@@ -94,7 +134,7 @@ export class VoiceAssistant {
   private async setupInterviewFlow(): Promise<void> {
     if (!this.isActive) return;
 
-    // Questions to ask
+    // Questions to ask (already humanized in askQuestion method)
     const setupQuestions = [
       "What type of interview would you like? Technical or behavioral?",
       "What role are you interviewing for?",
@@ -115,7 +155,7 @@ export class VoiceAssistant {
     for (let i = 0; i < setupQuestions.length; i++) {
       if (!this.isActive) break;
 
-      // Ask question
+      // Ask question (with humanization)
       await this.askQuestion(setupQuestions[i]);
 
       // Wait for "answer" (simulated)
@@ -144,8 +184,9 @@ export class VoiceAssistant {
     this.messages.push(message);
     this.onUpdateCallback?.(this.messages);
 
-    // Speak the question
-    await this.speak(question);
+    // Speak the question with humanization
+    const humanizedQuestion = this.humanizeSetupQuestion(question);
+    await this.speak(humanizedQuestion);
   }
 
   private async speak(text: string): Promise<void> {
@@ -170,9 +211,9 @@ export class VoiceAssistant {
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.volume = 1.0;
-      utterance.pitch = 1.0;
+      utterance.rate = 0.9;     // CHANGED: Slower for clarity (was 1.2)
+      utterance.volume = 0.9;   // CHANGED: Not too loud (was 1.0)
+      utterance.pitch = 1.05;   // CHANGED: Slightly higher = more engaging (was 1.0)
 
       // Get available voices
       const voices = window.speechSynthesis.getVoices();
@@ -284,8 +325,8 @@ export class VoiceAssistant {
   private async completeSetup(): Promise<void> {
     console.log("VoiceAssistant: Completing setup...");
 
-    // Final message
-    await this.speak("Excellent! I have all the information. Creating your interview now...");
+    // Final message with humanization
+    await this.speak("Excellent... I have all the information... Creating your interview now...");
 
     // Create the interview via API
     try {
@@ -305,7 +346,7 @@ export class VoiceAssistant {
       const data = await response.json();
 
       if (data.success) {
-        await this.speak(`Interview created successfully with ${data.count || 5} questions!`);
+        await this.speak(`Interview created successfully... with ${data.count || 5} questions!`);
         this.onCompleteCallback?.(data);
       } else {
         throw new Error(data.error || "Failed to create interview");

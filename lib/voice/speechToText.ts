@@ -1,4 +1,4 @@
-// lib/voice/speechtotext.ts - COMPLETE UPDATED VERSION
+// lib/voice/speechtotext.ts - UPDATED FOR INTERVIEWS
 "use client";
 
 export interface SpeechToTextEvents {
@@ -24,7 +24,8 @@ export class SpeechToText {
   private interimTranscript: string = "";
   private lastSpeechTimestamp: number = 0;
   private speechTimeout: NodeJS.Timeout | null = null;
-  private maxSilenceDuration: number = 10000; // 10 seconds of silence before timeout
+  private maxSilenceDuration: number = 15000; // CHANGED: 15 seconds for thoughtful answers (was 10000)
+  private _interviewMode: boolean = true; // Interview mode enabled by default
 
   private events: SpeechToTextEvents = {};
 
@@ -50,13 +51,14 @@ export class SpeechToText {
       this.recognition = new SpeechRecognitionAPI();
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
-      this.recognition.lang = "en-US";
-      this.recognition.maxAlternatives = 3; // Get multiple alternatives for better accuracy
+      this.recognition.lang = "en-KE"; // CHANGED: Kenyan English for better accent matching (was "en-US")
+      this.recognition.maxAlternatives = 5; // CHANGED: More alternatives for accent matching (was 3)
 
       console.log("✅ SpeechToText: Initialized with API:", {
         continuous: this.recognition.continuous,
         interimResults: this.recognition.interimResults,
-        lang: this.recognition.lang
+        lang: this.recognition.lang,
+        maxAlternatives: this.recognition.maxAlternatives
       });
 
       this.setupEventHandlers();
@@ -96,11 +98,17 @@ export class SpeechToText {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const transcript = result[0].transcript;
+        const confidence = result[0].confidence || 0; // Get confidence score
 
-        if (result.isFinal) {
+        // Only accept reasonably confident transcripts for interviews
+        if (result.isFinal && confidence > 0.3) { // CHANGED: Confidence filter for final
           finalTranscript += transcript;
-        } else {
+          console.log(`✅ Final transcript (confidence: ${confidence.toFixed(2)}):`, transcript);
+        } else if (confidence > 0.2) { // CHANGED: Lower threshold for interim
           interimTranscript += transcript;
+          console.log(`📋 Interim transcript (confidence: ${confidence.toFixed(2)}):`, transcript);
+        } else {
+          console.log(`⚠️ Low confidence (${confidence.toFixed(2)}), ignoring:`, transcript);
         }
       }
 
@@ -108,13 +116,11 @@ export class SpeechToText {
       if (finalTranscript) {
         this.finalTranscript = finalTranscript;
         this.transcript = this.finalTranscript;
-        console.log("✅ Final transcript:", finalTranscript);
         this.events.onTranscript?.(finalTranscript, true);
       }
 
       if (interimTranscript && interimTranscript !== this.interimTranscript) {
         this.interimTranscript = interimTranscript;
-        console.log("📋 Interim transcript:", interimTranscript);
         this.events.onTranscript?.(interimTranscript, false);
       }
     };
@@ -165,7 +171,7 @@ export class SpeechToText {
 
       switch(error) {
         case "no-speech":
-          console.log("🔇 No speech detected (user may be silent)");
+          console.log("🔇 No speech detected (user may be thinking)");
           this.events.onTimeout?.();
           break;
         case "aborted":
@@ -395,6 +401,27 @@ export class SpeechToText {
     }
   }
 
+  // ============ INTERVIEW-SPECIFIC METHODS ============
+
+  setInterviewMode(enabled: boolean): void {
+    this._interviewMode = enabled;
+    if (enabled) {
+      this.maxSilenceDuration = 15000; // Longer for interviews
+      this.setLanguage("en-KE"); // Kenyan English
+      if (this.recognition) {
+        this.recognition.maxAlternatives = 5; // More alternatives for accent matching
+      }
+      console.log("🎤 SpeechToText: Interview mode enabled (15s timeout, en-KE, 5 alternatives)");
+    } else {
+      this.maxSilenceDuration = 10000;
+      this.setLanguage("en-US");
+      if (this.recognition) {
+        this.recognition.maxAlternatives = 3;
+      }
+      console.log("🎤 SpeechToText: Interview mode disabled");
+    }
+  }
+
   // ============ EVENT HANDLERS ============
 
   onTranscript(callback: (text: string, isFinal: boolean) => void): void {
@@ -539,6 +566,8 @@ export class SpeechToText {
     console.log("🎤 Listening:", this.isListening);
     console.log("⏸️ Paused:", this.isPaused);
     console.log("📝 Transcript:", this.transcript.substring(0, 50) + '...');
+    console.log("🎤 Interview mode:", this._interviewMode ? "Enabled" : "Disabled");
+    console.log("⏰ Timeout:", this.maxSilenceDuration / 1000, "seconds");
 
     const compatibility = this.getBrowserCompatibility();
     console.log("🌐 Browser:", compatibility.browser, "-", compatibility.details);

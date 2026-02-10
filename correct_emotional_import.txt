@@ -1,0 +1,13 @@
+﻿// 🧠 CORRECT emotionalMemory import
+// Add this with other imports in memoryService.ts
+
+import {
+  recordEmotionalState,
+  analyzeEmotionalPatterns,
+  calculateEmotionalWellness,
+  getEmotionalTimeline,
+  getEmotionalPatterns,
+  getCurrentEmotionalState,
+  suggestEmotionalIntervention,
+  clearUserEmotionalData
+} from "./emotionalMemory";

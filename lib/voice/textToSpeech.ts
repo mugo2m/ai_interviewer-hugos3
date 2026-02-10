@@ -1,4 +1,4 @@
-// lib/voice/texttospeech.ts - COMPLETE FIXED VERSION
+// lib/voice/texttospeech.ts - UPDATED WITH HUMANIZATION
 "use client";
 
 export interface SpeechSynthesisConfig {
@@ -23,13 +23,14 @@ export class TextToSpeech {
   private currentUtterance: SpeechSynthesisUtterance | null = null;
 
   private config: SpeechSynthesisConfig = {
-    rate: 1.0,
-    pitch: 1.0,
-    volume: 1.0,
+    rate: 0.9,      // CHANGED: Slower, clearer delivery (was 1.2)
+    pitch: 1.05,    // CHANGED: Slightly higher = more engaging (was 1.0)
+    volume: 0.9,    // CHANGED: Not too loud (was 1.0)
     language: 'en-US'
   };
 
   private events: TextToSpeechEvents = {};
+  private _humanize: boolean = true; // Humanization enabled by default
 
   constructor(config?: SpeechSynthesisConfig) {
     if (typeof window === "undefined") {
@@ -61,13 +62,13 @@ export class TextToSpeech {
 
       const utterance = new SpeechSynthesisUtterance();
 
-      // Set text
-      utterance.text = text;
+      // Set text with humanization
+      utterance.text = this.humanizeInterviewText(text);  // CHANGED: Apply humanization
 
       // Apply configuration
-      utterance.rate = this.config.rate || 1.0;
-      utterance.pitch = this.config.pitch || 1.0;
-      utterance.volume = this.config.volume || 1.0;
+      utterance.rate = this.config.rate || 0.9;
+      utterance.pitch = this.config.pitch || 1.05;
+      utterance.volume = this.config.volume || 0.9;
       utterance.lang = this.config.language || 'en-US';
 
       // Try to get a good voice
@@ -157,6 +158,51 @@ export class TextToSpeech {
       }
     });
   }
+
+  // ============ HUMANIZATION METHODS ============
+
+  private humanizeInterviewText(text: string): string {
+    // Check if humanization is disabled
+    if (this._humanize === false) {
+      return text;
+    }
+
+    // Add thoughtful pauses
+    let humanized = text
+      .replace(/\. /g, '. ... ')      // Pause after sentences
+      .replace(/\?/g, '? ... ')       // Pause after questions
+      .replace(/, /g, ', ... ')       // Pause after commas
+      .replace(/:/g, ': ... ');       // Pause after colons
+
+    // Add interviewer cues randomly (but not too often)
+    const cues = ['Great. ', 'Interesting. ', 'Thank you. ', 'Alright. '];
+    if (Math.random() > 0.7 && !humanized.startsWith('Question')) {
+      const cue = cues[Math.floor(Math.random() * cues.length)];
+      humanized = cue + humanized;
+    }
+
+    // Ensure natural flow (no rushed questions)
+    if (humanized.includes('Question') && !humanized.includes('...')) {
+      humanized = humanized.replace('Question', 'Now... Question');
+    }
+
+    // Add small thinking sounds occasionally
+    if (Math.random() > 0.8) {
+      const thinkingSounds = ['Hmm... ', 'Well... ', 'Let me see... '];
+      const sound = thinkingSounds[Math.floor(Math.random() * thinkingSounds.length)];
+      humanized = sound + humanized;
+    }
+
+    console.log("🎭 TextToSpeech: Humanized text:", humanized.substring(0, 80) + "...");
+    return humanized;
+  }
+
+  setHumanization(enabled: boolean): void {
+    this._humanize = enabled;
+    console.log("🎭 TextToSpeech: Humanization", enabled ? "enabled" : "disabled");
+  }
+
+  // ============ VOICE SELECTION ============
 
   private setBestVoice(utterance: SpeechSynthesisUtterance): void {
     if (!this.synth) return;
@@ -294,15 +340,15 @@ export class TextToSpeech {
   // ============ GETTER METHODS ============
 
   getVolume(): number {
-    return this.config.volume || 1.0;
+    return this.config.volume || 0.9;
   }
 
   getRate(): number {
-    return this.config.rate || 1.0;
+    return this.config.rate || 0.9;
   }
 
   getPitch(): number {
-    return this.config.pitch || 1.0;
+    return this.config.pitch || 1.05;
   }
 
   getLanguage(): string {

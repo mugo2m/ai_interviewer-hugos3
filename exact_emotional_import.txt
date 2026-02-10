@@ -1,0 +1,10 @@
+﻿import {
+  recordEmotionalState,
+  analyzeEmotionalPatterns,
+  calculateEmotionalWellness,
+  getEmotionalTimeline,
+  getEmotionalPatterns,
+  getCurrentEmotionalState,
+  suggestEmotionalIntervention,
+  clearUserEmotionalData
+} from "./emotionalMemory";

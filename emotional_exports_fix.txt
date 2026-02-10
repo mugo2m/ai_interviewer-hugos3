@@ -1,0 +1,13 @@
+﻿// 🧠 ADD THIS TO THE END OF emotionalMemory.ts
+// Add this right before the final closing brace }
+
+export {
+  recordEmotionalState,
+  analyzeEmotionalPatterns,
+  calculateEmotionalWellness,
+  getEmotionalTimeline,
+  getEmotionalPatterns,
+  getCurrentEmotionalState,
+  suggestEmotionalIntervention,
+  clearUserEmotionalData
+};

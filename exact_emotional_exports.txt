@@ -1,0 +1,13 @@
+﻿  }
+  
+  // 🧠 EMOTIONAL MEMORY EXPORTS
+  export {
+    recordEmotionalState,
+    analyzeEmotionalPatterns,
+    calculateEmotionalWellness,
+    getEmotionalTimeline,
+    getEmotionalPatterns,
+    getCurrentEmotionalState,
+    suggestEmotionalIntervention,
+    clearUserEmotionalData
+  };
