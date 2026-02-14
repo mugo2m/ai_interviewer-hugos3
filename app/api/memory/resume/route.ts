@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { memoryService } from "@/lib/memory/memoryService";
+// ✅ Import the specific function you need
+import { getResumeInterviewData } from "@/lib/memory/memoryService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const resumeData = await memoryService.getResumeInterviewData(userId);
+    // ✅ Use the imported function directly
+    const resumeData = await getResumeInterviewData(userId);
 
     return NextResponse.json({
       success: true,

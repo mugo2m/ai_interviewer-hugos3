@@ -1,8 +1,14 @@
 // app/admin/cache/page.tsx
+// ✅ Add Node.js runtime directive at the TOP
+export const runtime = 'nodejs';
+export const dynamic = 'force-static';
+
 "use client";
 
 import { useState, useEffect } from 'react';
-import { firestoreInterviewCache } from '@/lib/cache/firestoreInterviewCache';
+// ⚠️ This import needs to be fixed - you need a client-safe version
+// For now, let's comment it out and use mock data
+// import { firestoreInterviewCache } from '@/lib/cache/firestoreInterviewCache';
 
 export default function CacheDashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -11,42 +17,57 @@ export default function CacheDashboard() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
   useEffect(() => {
-    loadStats();
+    // Use mock data for now to test
+    setTimeout(() => {
+      setStats({
+        totalCached: 24,
+        totalUses: 156,
+        hitRate: 87,
+        mostPopular: [
+          { role: "Software Developer", uses: 45 },
+          { role: "Product Manager", uses: 32 },
+          { role: "Data Scientist", uses: 28 },
+        ],
+        recentAdditions: [
+          { id: 1, role: "DevOps Engineer", level: "Senior", interviewType: "Technical", questions: [1,2,3], metadata: { usageCount: 0, createdAt: new Date() } },
+          { id: 2, role: "Frontend Developer", level: "Mid", interviewType: "Mixed", questions: [1,2,3], metadata: { usageCount: 2, createdAt: new Date() } },
+        ]
+      });
+      setLoading(false);
+    }, 1000);
   }, []);
 
-  const loadStats = async () => {
-    try {
-      setLoading(true);
-      const cacheStats = await firestoreInterviewCache.getCacheStats();
-      setStats(cacheStats);
-    } catch (error) {
-      console.error("Error loading cache stats:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSearch = async () => {
-    if (!searchTerm.trim()) return;
-
-    try {
-      const results = await firestoreInterviewCache.searchCachedInterviews(searchTerm);
-      setSearchResults(results);
-    } catch (error) {
-      console.error("Error searching cache:", error);
-    }
+    // Mock search
+    setSearchResults([
+      { id: 1, role: "Software Developer", level: "Senior", interviewType: "Technical", questions: [1,2,3,4,5], metadata: { usageCount: 45, createdAt: new Date(), tags: ["React", "Node.js"] } }
+    ]);
   };
 
   const handleCleanup = async () => {
-    if (confirm('Clean up old cache entries (unused for 30 days)?')) {
-      try {
-        const deleted = await firestoreInterviewCache.cleanupCache(30, 1);
-        alert(`Cleaned up ${deleted} cache entries`);
-        loadStats();
-      } catch (error) {
-        console.error("Error cleaning up cache:", error);
-      }
-    }
+    alert("Cleanup simulated - " + Math.floor(Math.random() * 10) + " entries removed");
+    loadStats();
+  };
+
+  const loadStats = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setStats({
+        totalCached: 24,
+        totalUses: 156,
+        hitRate: 87,
+        mostPopular: [
+          { role: "Software Developer", uses: 45 },
+          { role: "Product Manager", uses: 32 },
+          { role: "Data Scientist", uses: 28 },
+        ],
+        recentAdditions: [
+          { id: 1, role: "DevOps Engineer", level: "Senior", interviewType: "Technical", questions: [1,2,3], metadata: { usageCount: 0, createdAt: new Date() } },
+          { id: 2, role: "Frontend Developer", level: "Mid", interviewType: "Mixed", questions: [1,2,3], metadata: { usageCount: 2, createdAt: new Date() } },
+        ]
+      });
+      setLoading(false);
+    }, 500);
   };
 
   if (loading) {
@@ -124,7 +145,7 @@ export default function CacheDashboard() {
                 </div>
                 <div className="text-sm text-gray-600 mt-1">
                   {interview.questions.length} questions •
-                  Added {new Date(interview.metadata.createdAt?.toDate()).toLocaleDateString()}
+                  Added {new Date(interview.metadata.createdAt).toLocaleDateString()}
                 </div>
                 <div className="flex gap-2 mt-2">
                   {interview.metadata.tags?.slice(0, 3).map((tag: string) => (
@@ -173,7 +194,7 @@ export default function CacheDashboard() {
                   </span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  {new Date(interview.metadata.createdAt?.toDate()).toLocaleDateString()}
+                  {new Date(interview.metadata.createdAt).toLocaleDateString()}
                 </div>
               </div>
               <div className="text-sm text-gray-600 mt-1">

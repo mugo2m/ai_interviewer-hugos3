@@ -1,6 +1,11 @@
 // app/api/memory/emotion/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { emotionalMemory } from "@/lib/memory/emotionalMemory";
+// ✅ Import individual functions instead of emotionalMemory object
+import {
+  recordEmotionalState,
+  calculateEmotionalWellness,
+  getEmotionalPatterns
+} from "@/lib/memory/memoryService";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +19,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const timestamp = await emotionalMemory.recordEmotionalState({
+    // ✅ Use the imported function directly
+    const timestamp = await recordEmotionalState({
       userId,
       emotion,
       intensity,
@@ -49,17 +55,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const timeline = await emotionalMemory.getEmotionalTimeline(userId, limit);
-    const patterns = await emotionalMemory.getEmotionalPatterns(userId);
-    const wellness = await emotionalMemory.calculateEmotionalWellness(userId);
-    const progress = await emotionalMemory.getEmotionalProgress(userId);
+    // ✅ Fix these function calls - they need to be imported or implemented
+    // For now, let's use what's available in memoryService
+    const wellness = await calculateEmotionalWellness(userId);
+    const patterns = await getEmotionalPatterns(userId);
+
+    // These need to be implemented or removed
+    // const timeline = await emotionalMemory.getEmotionalTimeline(userId, limit);
+    // const progress = await emotionalMemory.getEmotionalProgress(userId);
 
     return NextResponse.json({
       success: true,
-      timeline,
+      // timeline: [],
       patterns,
       wellness,
-      progress
+      // progress: {}
     });
   } catch (error) {
     console.error("Error getting emotional data:", error);
