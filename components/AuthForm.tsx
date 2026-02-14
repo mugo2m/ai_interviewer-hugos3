@@ -87,8 +87,16 @@ const AuthForm = ({ type }: { type: FormType }) => {
         });
 
         toast.success("Signed in successfully.");
-        // 🔥 FIX: Force hard reload to ensure auth state is loaded
-        window.location.href = "/";
+
+        // 🔍 DEBUG LOGS
+        console.log("🔍 About to redirect to:", window.location.origin);
+        console.log("🔍 Current URL:", window.location.href);
+        console.log("🔍 Redirecting to home page...");
+
+        // Try multiple redirect methods
+        setTimeout(() => {
+          window.location.href = "/";
+        }, 100);
       }
     } catch (error) {
       console.log(error);
