@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRandomInterviewCover } from "@/lib/utils";
-
+import { GoogleGenerativeAI } from "@google/generative-ai"; // ✅ ADD THIS
 // Use lazy imports for Firebase to avoid Edge Runtime issues
+console.log("🔍 Question Generation Route (with cache) Loaded");
+console.log("📦 GoogleGenerativeAI import:", !!GoogleGenerativeAI);
+console.log("🔑 API Key exists:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+console.log("🔑 API Key preview:", process.env.GOOGLE_GENERATIVE_AI_API_KEY?.substring(0, 10) + "...");
+
 let db: any = null;
 let cacheModule: any = null;
 
@@ -307,8 +312,10 @@ Requirements:
 - Questions should be 10-25 words each
 
 Generated questions:`;
-
+          console.log("🤖 Initializing Gemini with API key length:", apiKey.length);
           const genAI = new GoogleGenerativeAI(apiKey);
+          console.log("✅ Gemini initialized successfully");
+
           const model = genAI.getGenerativeModel({
             model: "gemini-2.0-flash",
             generationConfig: {

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
+// 🔥 ADD THIS DEBUG
+console.log("🔍 Question Generation Route Loaded");
+console.log("📦 GoogleGenerativeAI import:", !!GoogleGenerativeAI);
+console.log("🔑 API Key exists:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+console.log("🔑 API Key preview:", process.env.GOOGLE_GENERATIVE_AI_API_KEY?.substring(0, 10) + "...");
 export async function POST(request: NextRequest) {
   try {
     const { type, role, level, techstack, amount, userid } = await request.json();

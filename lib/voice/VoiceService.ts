@@ -1,4 +1,4 @@
-// lib/voice/VoiceService.ts - UPDATED WITH HUMANIZATION
+// lib/voice/VoiceService.ts - COMPLETE FIXED VERSION WITH ANSWER VALIDATION
 "use client";
 
 import { toast } from "sonner";
@@ -44,7 +44,9 @@ export class VoiceService {
   private interviewQuestions: string[] = [];
   private currentQuestionIndex: number = 0;
   private isActive: boolean = false;
-  private useHumanization: boolean = true; // Humanization enabled by default
+  private useHumanization: boolean = true;
+  private isMicrophoneActive: boolean = false;
+  private manualStop: boolean = false;
 
   private speechToText: SpeechToText | null = null;
   private textToSpeech: TextToSpeech | null = null;
@@ -58,128 +60,106 @@ export class VoiceService {
     this.userId = config.userId;
     this.type = config.type;
 
-    console.log("?? VoiceService: Initialized");
+    console.log("🎤 VoiceService: Initialized");
 
-    // Initialize speech services
     this.speechToText = new SpeechToText();
     this.textToSpeech = new TextToSpeech({
       language: config.language || 'en-US',
-      rate: config.speechRate || 0.9,  // CHANGED: Slower default
-      volume: config.speechVolume || 0.9, // CHANGED: Not too loud
-      pitch: 1.05  // CHANGED: Slightly higher for engagement
+      rate: config.speechRate || 0.9,
+      volume: config.speechVolume || 0.9,
+      pitch: 1.05
     });
 
-    // Setup speech-to-text callbacks
     if (this.speechToText) {
       this.speechToText.onTranscript(this.handleUserTranscript.bind(this));
       this.speechToText.setLanguage(config.language || 'en-US');
-      this.speechToText.setInterviewMode(true); // Enable interview mode
+      this.speechToText.setInterviewMode(true);
+
+      console.log("🌐 VoiceService: SpeechToText initialized");
+
+      // Immediate permission check
+      setTimeout(() => {
+        this.speechToText?.checkMicrophonePermissions().then(granted => {
+          if (!granted) {
+            toast.error("Please allow microphone access to use voice features");
+          }
+        });
+      }, 1000);
     }
   }
 
-  // ============ HUMANIZATION METHODS ============
+  private handleUserTranscript = (text: string, isFinal: boolean): void => {
+    console.log(`📝 Transcript: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}", isFinal: ${isFinal}`);
 
-  private humanizeInterviewQuestion(text: string): string {
-    if (!this.useHumanization) return text;
+    // ALWAYS update transcript immediately
+    this.updateState({ transcript: text });
 
-    // Add professional pacing to interview questions
-    let humanized = text
-      .replace(/Question \d+\. /g, (match) => {
-        // Add variation to question numbers
-        const variations = ['Next question. ', 'Moving on. ', 'Alright. ', 'Great. '];
-        const variation = variations[Math.floor(Math.random() * variations.length)];
-        return `${variation}${match}`;
-      })
-      .replace(/\. /g, '. ... ')      // Pause after sentences
-      .replace(/\?/g, '? ... ')       // Pause after questions
-      .replace(/, /g, ', ... ')       // Pause after commas
-      .replace(/:/g, ': ... ');       // Pause after colons
-
-    // Add interview-specific naturalizers
-    if (humanized.includes('Can you') && !humanized.includes('...')) {
-      humanized = humanized.replace('Can you', 'Now... can you');
-    }
-    if (humanized.includes('Tell me') && !humanized.includes('...')) {
-      humanized = humanized.replace('Tell me', 'Alright... tell me');
+    if (!this.isActive || !this.isMicrophoneActive) {
+      console.log("⏸️ Not active, but transcript saved:", text.substring(0, 30));
+      return;
     }
 
-    // Add thinking sounds occasionally
-    if (Math.random() > 0.8) {
-      const thinkingSounds = ['Hmm... ', 'Well... ', 'Let me see... '];
-      const sound = thinkingSounds[Math.floor(Math.random() * thinkingSounds.length)];
-      humanized = sound + humanized;
+    if (isFinal) {
+      console.log("✅ Final transcript captured");
     }
-
-    console.log("🎭 VoiceService: Humanized question:", humanized.substring(0, 80) + "...");
-    return humanized;
-  }
+  };
 
   setHumanization(enabled: boolean): void {
     this.useHumanization = enabled;
     if (this.textToSpeech) {
       this.textToSpeech.setHumanization(enabled);
     }
-    console.log("🎭 VoiceService: Humanization", enabled ? "enabled" : "disabled");
   }
 
   public setInterviewQuestions(questions: string[]): void {
     this.interviewQuestions = questions;
-    console.log("?? VoiceService: Set", questions.length, "questions");
+    console.log("📋 Set", questions.length, "questions");
   }
 
-  // ============ INTERVIEW CONTROL ============
-
   public async startInterview(): Promise<void> {
-    console.log("?? VoiceService: Starting interview");
+    console.log("🎬 Starting interview");
 
     if (this.interviewQuestions.length === 0) {
       throw new Error("No interview questions set");
     }
 
     this.isActive = true;
+    this.manualStop = false;
     this.currentQuestionIndex = 0;
     this.messages = [];
-    this.state = {
-      isListening: false,
-      isSpeaking: false,
-      isProcessing: false,
-      transcript: "",
-      error: null,
-    };
-
-    this.updateState({ isProcessing: true });
+    this.updateState({
+      isProcessing: true,
+      transcript: ""
+    });
 
     try {
-      await this.speak("Interview starting... I will ask questions... and wait for your answers.");
+      await this.speak("Interview starting...");
       await this.delay(1000);
       await this.askCurrentQuestion();
-
     } catch (error: any) {
-      console.error("? VoiceService: Failed to start:", error);
+      console.error("❌ Failed to start:", error);
       this.handleError(error.message);
     }
   }
 
   private async askCurrentQuestion(): Promise<void> {
-    console.log(`?? askCurrentQuestion: index=${this.currentQuestionIndex}, total=${this.interviewQuestions.length}`);
+    console.log(`📢 askCurrentQuestion: index=${this.currentQuestionIndex}, total=${this.interviewQuestions.length}, isActive=${this.isActive}`);
 
     if (!this.isActive) {
-      console.log("? Not active, returning");
+      console.log("⏸️ Not active, returning");
       return;
     }
 
-    // Check if all questions are done
     if (this.currentQuestionIndex >= this.interviewQuestions.length) {
-      console.log("?? All questions completed, finishing interview");
+      console.log("🎯🎯🎯 COMPLETION CONDITION MET! 🎯🎯🎯");
+      console.log(`   Index: ${this.currentQuestionIndex}, Total: ${this.interviewQuestions.length}`);
       await this.completeInterview();
       return;
     }
 
     const question = this.interviewQuestions[this.currentQuestionIndex];
+    console.log(`❓ Asking question ${this.currentQuestionIndex + 1}:`, question.substring(0, 50));
 
-    console.log(`? Asking question ${this.currentQuestionIndex + 1}: "${question.substring(0, 50)}..."`);
-
-    // Save question
     const questionMessage: VoiceMessage = {
       role: "assistant",
       content: `Question ${this.currentQuestionIndex + 1}: ${question}`,
@@ -188,79 +168,118 @@ export class VoiceService {
     this.messages.push(questionMessage);
     this.onUpdateCallback?.(this.messages);
 
-    // Speak question with humanization
-    const humanizedQuestion = this.humanizeInterviewQuestion(`Question ${this.currentQuestionIndex + 1}. ${question}`);
-    await this.speak(humanizedQuestion);
-    await this.speak("When ready... click Submit Answer.");
+    await this.speak(`Question ${this.currentQuestionIndex + 1}. ${question}`);
 
-    // Start listening
+    await this.delay(500);
     await this.startListening();
   }
 
   private async startListening(): Promise<void> {
-    console.log(`?? startListening: active=${this.isActive}`);
+    console.log(`👂 Start listening for question ${this.currentQuestionIndex + 1}`);
 
     if (!this.isActive || !this.speechToText) {
-      console.log("? Cannot start listening");
+      console.log("⏸️ Cannot start listening");
       return;
     }
 
+    // Stop any existing session
+    try {
+      if (this.speechToText.getIsListening()) {
+        this.speechToText.stop();
+        await this.delay(300);
+      }
+    } catch (e) {}
+
     this.updateState({
       isListening: true,
-      isSpeaking: false,
-      transcript: ""
+      isSpeaking: false
     });
 
-    toast.info(`?? Question ${this.currentQuestionIndex + 1} - Speak then click Submit`);
+    this.isMicrophoneActive = true;
+    this.manualStop = false;
+
+    toast.info(`🎤 Question ${this.currentQuestionIndex + 1} - Speak your answer`);
 
     try {
       this.speechToText.clearTranscript();
       await this.speechToText.start();
-      console.log("? Listening started");
+      console.log("✅ Listening started successfully");
     } catch (error: any) {
-      console.error("? Failed to start listening:", error);
+      console.error("❌ Failed to start listening:", error);
+      this.updateState({ isListening: false });
+      this.isMicrophoneActive = false;
+      toast.error("Microphone access failed. Please check permissions.");
     }
   }
 
-  private async handleUserTranscript(text: string, isFinal: boolean): Promise<void> {
-    console.log(`?? handleUserTranscript: text="${text}", isFinal=${isFinal}`);
+  private humanizeInterviewQuestion(text: string): string {
+    if (!this.useHumanization) return text;
 
-    if (!this.isActive) {
-      console.log("? Not active, ignoring");
-      return;
-    }
+    let humanized = text
+      .replace(/Question \d+\. /g, (match) => {
+        const variations = ['Next question. ', 'Moving on. ', 'Alright. ', 'Great. '];
+        return variations[Math.floor(Math.random() * variations.length)] + match;
+      })
+      .replace(/\. /g, '. ... ')
+      .replace(/\?/g, '? ... ');
 
-    // Update transcript
-    this.updateState({ transcript: text });
-
-    // DO NOT auto-advance based on speech
-    // User must manually submit
+    return humanized;
   }
 
-  // ============ MANUAL CONTROLS ============
-
+  // ============ FIXED: submitAnswer with validation ============
   public async submitAnswer(): Promise<void> {
-    console.log(`?? submitAnswer called for question ${this.currentQuestionIndex + 1}`);
+    console.log(`✅ Submit answer for question ${this.currentQuestionIndex + 1}`);
 
     if (!this.isActive) {
-      console.log("? Not active, cannot submit");
       toast.error("Interview not active");
       return;
     }
 
     // Stop listening
+    this.isMicrophoneActive = false;
+    this.manualStop = true;
     this.speechToText?.stop();
     this.updateState({ isListening: false });
 
     const answerText = this.state.transcript.trim();
 
     if (!answerText) {
-      console.log("?? No answer to submit");
+      console.log("⚠️ No answer to submit");
       toast.warning("Please speak an answer first");
+
+      // Resume listening
+      this.isMicrophoneActive = true;
+      this.manualStop = false;
+      await this.startListening();
       return;
     }
 
-    console.log(`? Submitting answer: "${answerText.substring(0, 50)}..."`);
+    // 🔥 FIX: Prevent empty or very short answers
+    if (answerText.length < 3) {
+      console.log("⚠️ Answer too short, please speak more");
+      toast.warning("Please provide a longer answer (at least 3 words)");
+
+      // Resume listening
+      this.isMicrophoneActive = true;
+      this.manualStop = false;
+      await this.startListening();
+      return;
+    }
+
+    // Check word count (optional but recommended)
+    const wordCount = answerText.split(/\s+/).length;
+    if (wordCount < 3) {
+      console.log("⚠️ Answer too short - only", wordCount, "words");
+      toast.warning("Please provide a more detailed answer (at least 3 words)");
+
+      // Resume listening
+      this.isMicrophoneActive = true;
+      this.manualStop = false;
+      await this.startListening();
+      return;
+    }
+
+    console.log(`📤 Submitting answer (${answerText.length} chars, ${wordCount} words):`, answerText.substring(0, 50));
 
     // Save answer
     const answerMessage: VoiceMessage = {
@@ -271,35 +290,30 @@ export class VoiceService {
     this.messages.push(answerMessage);
     this.onUpdateCallback?.(this.messages);
 
-    toast.success(`? Answer ${this.currentQuestionIndex + 1} submitted!`);
+    toast.success(`✅ Answer ${this.currentQuestionIndex + 1} submitted`);
 
-    // Acknowledge with humanization
-    await this.speak("Thank you for your answer...");
-    await this.delay(1000);
+    await this.speak("Thank you.");
+    await this.delay(800);
 
     // Move to next question
     this.currentQuestionIndex++;
 
-    // Clear transcript
+    // Clear transcript AFTER saving
     this.updateState({ transcript: "" });
 
-    // Ask next question (or complete if done)
     await this.askCurrentQuestion();
   }
 
   public async skipQuestion(): Promise<void> {
-    console.log(`?? skipQuestion called for question ${this.currentQuestionIndex + 1}`);
+    console.log(`⏭️ Skip question ${this.currentQuestionIndex + 1}`);
 
-    if (!this.isActive) {
-      console.log("? Not active, cannot skip");
-      return;
-    }
+    if (!this.isActive) return;
 
-    // Stop listening
+    this.isMicrophoneActive = false;
+    this.manualStop = true;
     this.speechToText?.stop();
     this.updateState({ isListening: false });
 
-    // Add skip message
     const skipMessage: VoiceMessage = {
       role: "user",
       content: `[Skipped question ${this.currentQuestionIndex + 1}]`,
@@ -308,145 +322,106 @@ export class VoiceService {
     this.messages.push(skipMessage);
     this.onUpdateCallback?.(this.messages);
 
-    toast.info(`?? Question ${this.currentQuestionIndex + 1} skipped`);
+    toast.info(`⏭️ Question ${this.currentQuestionIndex + 1} skipped`);
 
-    // Acknowledge
-    await this.speak("Question skipped...");
-    await this.delay(1000);
+    await this.speak("Question skipped.");
+    await this.delay(800);
 
-    // Move to next question
     this.currentQuestionIndex++;
-
-    // Clear transcript
     this.updateState({ transcript: "" });
-
-    // Ask next question (or complete if done)
     await this.askCurrentQuestion();
   }
 
-  // ============ COMPLETION LOGIC ============
-
+  // ============ FIXED: completeInterview with LOUD DEBUG ============
   private async completeInterview(): Promise<void> {
-    console.log("?? completeInterview() called - FINISHING");
+    console.log("🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁");
+    console.log("🏁 COMPLETE INTERVIEW CALLED! 🏁");
+    console.log("🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁🏁");
+    console.log("📊 State:", {
+      isActive: this.isActive,
+      interviewId: this.interviewId,
+      userId: this.userId,
+      currentQuestionIndex: this.currentQuestionIndex,
+      totalQuestions: this.interviewQuestions.length,
+      messagesCount: this.messages.length,
+      userMessages: this.messages.filter(m => m.role === 'user').length,
+      hasCallback: !!this.onCompleteCallback
+    });
 
     if (!this.isActive) {
-      console.log("? Not active, cannot complete");
+      console.log("⏸️ Not active, cannot complete");
       return;
     }
 
     this.isActive = false;
+    this.isMicrophoneActive = false;
+    this.manualStop = true;
+    this.speechToText?.stop();
+
     this.updateState({
       isListening: false,
       isSpeaking: false,
       isProcessing: true
     });
 
-    await this.speak("Interview completed... Redirecting to feedback...");
+    await this.speak("Interview completed.");
 
-    try {
-      // Prepare completion data
-      const completionData = {
-        success: true,
-        interviewId: this.interviewId,
-        userId: this.userId,
-        feedbackId: `local-${Date.now()}`,
-        message: "Interview completed successfully",
-        questionsAsked: this.interviewQuestions.length,
-        answersGiven: this.messages.filter(m => m.role === 'user').length,
-        transcript: this.messages,
-        timestamp: new Date().toISOString(),
-        fallback: false
-      };
+    const userAnswers = this.messages.filter(m => m.role === 'user');
+    console.log(`📊 Interview completed with ${userAnswers.length} answers`);
 
-      console.log("?? Prepared completion data:", completionData);
+    const completionData = {
+      success: true,
+      interviewId: this.interviewId,
+      userId: this.userId,
+      feedbackId: `local-${Date.now()}`,
+      questionsAsked: this.interviewQuestions.length,
+      answersGiven: userAnswers.length,
+      transcript: this.messages,
+      timestamp: new Date().toISOString(),
+      fallback: false
+    };
 
-      // CRITICAL FIX: Call onComplete callback FIRST
-      if (this.onCompleteCallback) {
-        console.log("?? Calling onComplete callback");
-        this.onCompleteCallback(completionData);
-      } else {
-        console.error("? No onComplete callback registered!");
-        // Try again after a short delay
-        setTimeout(() => {
-          if (this.onCompleteCallback) {
-            console.log("?? Retrying onComplete callback");
-            this.onCompleteCallback(completionData);
-          } else {
-            console.error("? Still no callback after retry");
-          }
-        }, 500);
-      }
+    console.log("📦 Completion data prepared:", completionData);
 
-      // Now try to generate feedback in background (non-blocking)
-      setTimeout(async () => {
-        try {
-          const transcript = this.messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }));
+    // 🔥 CRITICAL: Call the callback IMMEDIATELY with loud logging
+    if (this.onCompleteCallback) {
+      console.log("📞📞📞 CALLING ONCOMPLETE CALLBACK! 📞📞📞");
+      console.log("   Callback function exists, executing now...");
+      this.onCompleteCallback(completionData);
+      console.log("✅ ONCOMPLETE CALLBACK EXECUTED");
+    } else {
+      console.error("❌❌❌ NO ONCOMPLETE CALLBACK REGISTERED! ❌❌❌");
+      console.error("   This is why Agent.tsx never receives completion!");
 
-          console.log("?? Sending to feedback API in background...");
-
-          const response = await fetch("/api/feedback", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              interviewId: this.interviewId,
-              userId: this.userId,
-              transcript: transcript
-            })
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            console.log("?? Feedback API success:", data);
-          } else {
-            console.warn("?? Feedback API error:", response.status);
-          }
-        } catch (feedbackError) {
-          console.warn("?? Feedback API failed, but interview completed:", feedbackError);
+      // Try again after a delay (in case callback is registered late)
+      console.log("⏰ Will retry callback in 500ms...");
+      setTimeout(() => {
+        if (this.onCompleteCallback) {
+          console.log("📞📞📞 CALLING ONCOMPLETE CALLBACK (DELAYED)! 📞📞📞");
+          this.onCompleteCallback(completionData);
+          console.log("✅ DELAYED CALLBACK EXECUTED");
+        } else {
+          console.error("❌❌❌ STILL NO CALLBACK AFTER DELAY! ❌❌❌");
+          console.error("   Check that Agent.tsx registers onComplete BEFORE startInterview");
         }
-      }, 1000); // Start after 1 second
-
-    } catch (error: any) {
-      console.error("? Error in completeInterview:", error);
-
-      // Call onComplete even with error
-      if (this.onCompleteCallback) {
-        this.onCompleteCallback({
-          success: true,
-          interviewId: this.interviewId,
-          userId: this.userId,
-          feedbackId: `error-${Date.now()}`,
-          message: "Interview completed with error",
-          fallback: true,
-          error: error.message,
-          questionsAsked: this.interviewQuestions.length,
-          answersGiven: this.messages.filter(m => m.role === 'user').length,
-          timestamp: new Date().toISOString()
-        });
-      }
-
-    } finally {
-      this.updateState({ isProcessing: false });
-      console.log("?? Interview completion process finished");
+      }, 500);
     }
-  }
 
-  // ============ HELPER METHODS ============
+    this.updateState({ isProcessing: false });
+    console.log("✅ Interview completion process finished");
+  }
 
   private async speak(text: string): Promise<void> {
     if (!this.textToSpeech) {
-      console.log("?? AI:", text);
+      console.log("🤖 AI:", text);
       return;
     }
 
     this.updateState({ isSpeaking: true });
-
     try {
       await this.textToSpeech.speak(text);
     } catch (error) {
-      console.log("?? AI:", text);
+      console.log("🤖 AI (fallback):", text);
     } finally {
       this.updateState({ isSpeaking: false });
     }
@@ -462,21 +437,19 @@ export class VoiceService {
   }
 
   private handleError(error: string): void {
-    console.error("? Error:", error);
+    console.error("❌ Error:", error);
     this.state.error = error;
     this.isActive = false;
-    toast.error("Voice service error");
+    this.isMicrophoneActive = false;
   }
 
-  // ============ PUBLIC METHODS ============
-
   public stop(): void {
-    console.log("?? stop() called");
+    console.log("🛑 Stopping");
     this.isActive = false;
-
+    this.isMicrophoneActive = false;
+    this.manualStop = true;
     this.speechToText?.stop();
     this.textToSpeech?.stop();
-
     this.updateState({
       isListening: false,
       isSpeaking: false,
@@ -493,24 +466,20 @@ export class VoiceService {
   }
 
   public onComplete(callback: (data: any) => void): void {
-    console.log("?? onComplete callback registered");
+    console.log("📞 onComplete callback REGISTERED in VoiceService");
     this.onCompleteCallback = callback;
   }
 
   public destroy(): void {
-    console.log("?? destroy() called");
+    console.log("🗑️ Destroying");
     this.stop();
-
     this.speechToText?.destroy();
     this.textToSpeech?.destroy();
-
     this.onStateChangeCallback = null;
     this.onUpdateCallback = null;
     this.onCompleteCallback = null;
-
     this.messages = [];
     this.interviewQuestions = [];
-    this.currentQuestionIndex = 0;
   }
 }
 

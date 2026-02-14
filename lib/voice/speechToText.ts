@@ -1,19 +1,7 @@
-// lib/voice/speechtotext.ts - UPDATED FOR INTERVIEWS
+// lib/voice/speechToText.ts - COMPLETE FIXED VERSION
 "use client";
 
-export interface SpeechToTextEvents {
-  onTranscript?: (text: string, isFinal: boolean) => void;
-  onStart?: () => void;
-  onEnd?: () => void;
-  onError?: (error: string) => void;
-  onTimeout?: () => void;
-  onPermissionChange?: (granted: boolean) => void;
-}
-
-export interface SpeechRecognitionError extends Event {
-  error: string;
-  message?: string;
-}
+import { SpeechToTextEvents } from "./types";
 
 export class SpeechToText {
   private recognition: any = null;
@@ -24,8 +12,12 @@ export class SpeechToText {
   private interimTranscript: string = "";
   private lastSpeechTimestamp: number = 0;
   private speechTimeout: NodeJS.Timeout | null = null;
-  private maxSilenceDuration: number = 15000; // CHANGED: 15 seconds for thoughtful answers (was 10000)
-  private _interviewMode: boolean = true; // Interview mode enabled by default
+  private maxSilenceDuration: number = 20000;
+  private _interviewMode: boolean = true;
+  private manualStop: boolean = false;
+  private restartAttempts: number = 0;
+  private maxRestartAttempts: number = 10;
+  private permissionGranted: boolean = false;
 
   private events: SpeechToTextEvents = {};
 
@@ -37,60 +29,64 @@ export class SpeechToText {
 
   private initializeRecognition(): void {
     try {
-      const SpeechRecognitionAPI = (window as any).SpeechRecognition ||
-                                  (window as any).webkitSpeechRecognition ||
-                                  (window as any).mozSpeechRecognition ||
-                                  (window as any).msSpeechRecognition;
+      // Get the SpeechRecognition constructor
+      const SpeechRecognition = (window as any).SpeechRecognition ||
+                               (window as any).webkitSpeechRecognition;
 
-      if (!SpeechRecognitionAPI) {
-        console.log("❌ SpeechToText: Speech Recognition API not available in this browser");
-        this.handleUnsupportedBrowser();
+      if (!SpeechRecognition) {
+        console.error("❌ SpeechRecognition: API not available");
+        this.events.onError?.("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
         return;
       }
 
-      this.recognition = new SpeechRecognitionAPI();
+      // Create recognition instance
+      this.recognition = new SpeechRecognition();
+
+      // Configure for best performance
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
-      this.recognition.lang = "en-KE"; // CHANGED: Kenyan English for better accent matching (was "en-US")
-      this.recognition.maxAlternatives = 5; // CHANGED: More alternatives for accent matching (was 3)
+      this.recognition.lang = "en-US";
+      this.recognition.maxAlternatives = 1;
 
-      console.log("✅ SpeechToText: Initialized with API:", {
+      console.log("✅ SpeechRecognition: Initialized successfully", {
         continuous: this.recognition.continuous,
         interimResults: this.recognition.interimResults,
-        lang: this.recognition.lang,
-        maxAlternatives: this.recognition.maxAlternatives
+        lang: this.recognition.lang
       });
 
       this.setupEventHandlers();
 
-      // Pre-check microphone permissions
-      this.checkMicrophonePermissions().then(granted => {
-        console.log("🎤 Microphone permission pre-check:", granted ? "✅ Granted" : "❌ Denied");
-      });
+      // Check permissions immediately
+      this.checkMicrophonePermissions();
 
     } catch (error) {
-      console.error("❌ SpeechToText: Failed to initialize:", error);
-      this.handleUnsupportedBrowser();
+      console.error("❌ SpeechRecognition: Failed to initialize:", error);
+      this.events.onError?.("Failed to initialize speech recognition");
     }
   }
 
   private setupEventHandlers(): void {
     if (!this.recognition) return;
 
+    // FIXED: Proper onstart handler
     this.recognition.onstart = () => {
-      console.log("🎤 SpeechToText: Recognition started");
+      console.log("✅✅✅ SpeechRecognition: STARTED - Microphone is ACTIVE");
       this.isListening = true;
-      this.isPaused = false;
+      this.manualStop = false;
+      this.restartAttempts = 0;
       this.lastSpeechTimestamp = Date.now();
       this.events.onStart?.();
-
-      // Start speech timeout monitoring
       this.startSpeechTimeout();
     };
 
+    // FIXED: Better result handling
     this.recognition.onresult = (event: any) => {
-      console.log("📝 SpeechToText: Got result");
-      this.lastSpeechTimestamp = Date.now(); // Reset timeout on speech
+      console.log("📢 SpeechRecognition: Received audio data", {
+        resultIndex: event.resultIndex,
+        resultCount: event.results.length
+      });
+
+      this.lastSpeechTimestamp = Date.now();
 
       let interimTranscript = "";
       let finalTranscript = "";
@@ -98,146 +94,147 @@ export class SpeechToText {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const transcript = result[0].transcript;
-        const confidence = result[0].confidence || 0; // Get confidence score
+        const confidence = result[0].confidence;
 
-        // Only accept reasonably confident transcripts for interviews
-        if (result.isFinal && confidence > 0.3) { // CHANGED: Confidence filter for final
+        if (result.isFinal) {
           finalTranscript += transcript;
-          console.log(`✅ Final transcript (confidence: ${confidence.toFixed(2)}):`, transcript);
-        } else if (confidence > 0.2) { // CHANGED: Lower threshold for interim
-          interimTranscript += transcript;
-          console.log(`📋 Interim transcript (confidence: ${confidence.toFixed(2)}):`, transcript);
+          console.log(`✅ FINAL: "${transcript}" (${Math.round(confidence * 100)}% confidence)`);
         } else {
-          console.log(`⚠️ Low confidence (${confidence.toFixed(2)}), ignoring:`, transcript);
+          interimTranscript += transcript;
+          console.log(`🟡 INTERIM: "${transcript}"`);
         }
       }
 
-      // Update transcripts
+      // Update final transcript
       if (finalTranscript) {
         this.finalTranscript = finalTranscript;
         this.transcript = this.finalTranscript;
         this.events.onTranscript?.(finalTranscript, true);
       }
 
-      if (interimTranscript && interimTranscript !== this.interimTranscript) {
+      // Update interim transcript (REAL-TIME)
+      if (interimTranscript) {
         this.interimTranscript = interimTranscript;
+        this.transcript = this.interimTranscript;
         this.events.onTranscript?.(interimTranscript, false);
+      }
+
+      // FIXED: Force update even with short utterances
+      if (!finalTranscript && !interimTranscript && event.results.length > 0) {
+        const fallback = event.results[0][0].transcript;
+        if (fallback) {
+          console.log(`⚠️ FALLBACK: "${fallback}"`);
+          this.transcript = fallback;
+          this.events.onTranscript?.(fallback, false);
+        }
       }
     };
 
+    // FIXED: Better error handling
     this.recognition.onerror = (event: any) => {
-      this.handleRecognitionError(event);
+      console.log("❌ SpeechRecognition: Error event:", event.error);
+
+      switch (event.error) {
+        case 'not-allowed':
+        case 'permission-denied':
+          this.permissionGranted = false;
+          this.events.onError?.("Microphone access denied. Please allow microphone access in your browser settings.");
+          this.events.onPermissionChange?.(false);
+          this.manualStop = true;
+          break;
+
+        case 'no-speech':
+          console.log("🔇 No speech detected - still listening");
+          this.events.onTimeout?.();
+          break;
+
+        case 'audio-capture':
+          this.events.onError?.("No microphone found. Please connect a microphone.");
+          break;
+
+        case 'network':
+          this.events.onError?.("Network error. Please check your internet connection.");
+          break;
+
+        case 'aborted':
+          console.log("⏹️ Recognition aborted (normal)");
+          break;
+
+        case 'language-not-supported':
+          this.events.onError?.("Language not supported. Using en-US.");
+          this.setLanguage("en-US");
+          break;
+
+        default:
+          console.warn("⚠️ Unknown error:", event.error);
+      }
     };
 
+    // FIXED: Auto-restart with backoff
     this.recognition.onend = () => {
-      console.log("🛑 SpeechToText: Recognition ended");
+      console.log("🛑 SpeechRecognition: ENDED", {
+        isListening: this.isListening,
+        manualStop: this.manualStop,
+        interviewMode: this._interviewMode,
+        restartAttempts: this.restartAttempts
+      });
+
       this.isListening = false;
-      this.isPaused = false;
       this.clearSpeechTimeout();
       this.events.onEnd?.();
+
+      // Auto-restart for interview mode
+      if (this._interviewMode && !this.manualStop && this.restartAttempts < this.maxRestartAttempts) {
+        this.restartAttempts++;
+        const delay = Math.min(500 * this.restartAttempts, 3000);
+        console.log(`🔄 Auto-restarting in ${delay}ms (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...`);
+
+        setTimeout(() => {
+          if (this._interviewMode && !this.manualStop) {
+            this.start().catch(e => {
+              console.log("❌ Auto-restart failed:", e);
+            });
+          }
+        }, delay);
+      }
     };
 
-    this.recognition.onspeechend = () => {
-      console.log("🔇 SpeechToText: Speech ended");
-      // Don't stop immediately, wait for timeout
-    };
-
+    // FIXED: Sound detection for debugging
     this.recognition.onsoundstart = () => {
-      console.log("🔊 SpeechToText: Sound detected");
+      console.log("🔊🔊🔊 SOUND DETECTED - Microphone is receiving audio!");
       this.lastSpeechTimestamp = Date.now();
     };
 
     this.recognition.onsoundend = () => {
-      console.log("🔇 SpeechToText: Sound ended");
+      console.log("🔇 Sound ended");
+    };
+
+    this.recognition.onspeechstart = () => {
+      console.log("🗣️ Speech start detected");
+    };
+
+    this.recognition.onspeechend = () => {
+      console.log("🤚 Speech end detected");
     };
 
     this.recognition.onaudiostart = () => {
-      console.log("🎵 SpeechToText: Audio started");
+      console.log("🎵 Audio stream started");
     };
 
     this.recognition.onaudioend = () => {
-      console.log("🎵 SpeechToText: Audio ended");
+      console.log("🎵 Audio stream ended");
     };
-  }
-
-  private handleRecognitionError(event: any): void {
-    const error = event.error || "unknown";
-    console.log("🔍 SpeechToText: Recognition error:", error);
-
-    // Normal/expected errors - don't treat as failures
-    const normalErrors = ["no-speech", "aborted", "audio-capture"];
-    if (normalErrors.includes(error)) {
-      console.log(`📌 SpeechToText: Normal error - ${error}`);
-
-      switch(error) {
-        case "no-speech":
-          console.log("🔇 No speech detected (user may be thinking)");
-          this.events.onTimeout?.();
-          break;
-        case "aborted":
-          console.log("⏹️ Recognition was aborted (normal when stopping)");
-          break;
-        case "audio-capture":
-          console.log("🎤 No microphone available or not connected");
-          this.events.onError?.("No microphone found. Please connect a microphone.");
-          break;
-      }
-
-      this.isListening = false;
-      this.events.onEnd?.();
-      return;
-    }
-
-    // Critical errors that need user action
-    switch(error) {
-      case "not-allowed":
-      case "service-not-allowed":
-        console.error("🚫 Microphone access denied by user or browser");
-        this.events.onError?.("Microphone access denied. Please allow microphone permissions in your browser settings.");
-        this.events.onPermissionChange?.(false);
-        break;
-
-      case "network":
-        console.error("🌐 Network error during speech recognition");
-        this.events.onError?.("Network error. Please check your internet connection.");
-        break;
-
-      case "bad-grammar":
-        console.warn("⚠️ Bad grammar in speech recognition");
-        // Not a critical error, continue listening
-        break;
-
-      case "language-not-supported":
-        console.error("🌐 Language not supported");
-        this.events.onError?.("The selected language is not supported by your browser.");
-        break;
-
-      default:
-        console.warn("⚠️ Unknown recognition error:", error);
-        this.events.onError?.(`Speech recognition error: ${error}`);
-    }
-
-    this.stop();
-  }
-
-  private handleUnsupportedBrowser(): void {
-    console.log("🌐 SpeechToText: This browser doesn't support speech recognition");
-    console.log("💡 Supported browsers: Chrome, Edge, Safari (limited)");
-    this.events.onError?.("Speech recognition is not supported in this browser. Try Chrome or Edge.");
   }
 
   private startSpeechTimeout(): void {
     this.clearSpeechTimeout();
-
     this.speechTimeout = setInterval(() => {
       const timeSinceLastSpeech = Date.now() - this.lastSpeechTimestamp;
-
-      if (timeSinceLastSpeech > this.maxSilenceDuration) {
-        console.log("⏰ SpeechToText: Speech timeout - no speech for", this.maxSilenceDuration / 1000, "seconds");
+      if (timeSinceLastSpeech > this.maxSilenceDuration && this.isListening) {
+        console.log(`⏰ No speech for ${this.maxSilenceDuration / 1000} seconds`);
         this.events.onTimeout?.();
-        this.stop();
       }
-    }, 1000); // Check every second
+    }, 1000);
   }
 
   private clearSpeechTimeout(): void {
@@ -247,85 +244,94 @@ export class SpeechToText {
     }
   }
 
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // FIXED: Start with better error recovery
   async start(): Promise<void> {
-    console.log("🎤 SpeechToText: Starting...");
+    console.log("🎤 SpeechRecognition: START command received");
 
     return new Promise(async (resolve, reject) => {
       if (!this.recognition) {
-        console.log("❌ SpeechToText: No recognition available");
-        this.events.onError?.("Speech recognition not available");
-        reject(new Error("Speech recognition not available"));
-        return;
+        this.initializeRecognition();
+        await this.delay(500);
+        if (!this.recognition) {
+          reject(new Error("Speech recognition not available"));
+          return;
+        }
       }
 
       // Check permissions first
       const hasPermission = await this.checkMicrophonePermissions();
       if (!hasPermission) {
-        console.log("❌ SpeechToText: Microphone permission denied");
-        this.events.onError?.("Microphone permission denied. Please allow access.");
-        this.events.onPermissionChange?.(false);
+        this.events.onError?.("Microphone access denied. Please allow access in browser settings.");
         reject(new Error("Microphone permission denied"));
         return;
       }
 
-      try {
-        // Add safety timeout
-        const safetyTimeout = setTimeout(() => {
-          console.log("⏰ SpeechToText: Start timeout, using fallback");
-          this.simulateStart();
-          resolve();
-        }, 2000);
+      // Stop if already listening
+      if (this.isListening) {
+        console.log("⚠️ Already listening, stopping first");
+        this.stop();
+        await this.delay(500);
+      }
 
-        const onStartHandler = () => {
-          clearTimeout(safetyTimeout);
-          console.log("✅ SpeechToText: Real recognition started");
+      this.manualStop = false;
+
+      try {
+        // Set up start handler
+        const startHandler = () => {
+          console.log("✅✅✅ SpeechRecognition: Successfully started!");
+          this.isListening = true;
+          this.events.onStart?.();
           resolve();
         };
 
-        this.recognition.onstart = onStartHandler;
+        this.recognition.onstart = startHandler;
 
-        this.recognition.start();
-        console.log("🎤 SpeechToText: Start command sent");
+        // Start recognition
+        await this.recognition.start();
+        console.log("🎤 Start command sent to browser");
 
       } catch (error: any) {
-        console.log("❌ SpeechToText: Failed to start:", error.message);
+        console.error("❌ Failed to start:", error);
 
-        // Fallback to simulated mode
-        if (error.name === 'NotAllowedError' || error.message.includes('permission')) {
-          this.events.onError?.("Microphone permission denied. Please allow access.");
-          this.events.onPermissionChange?.(false);
+        if (error.name === 'InvalidStateError' || error.message?.includes('already started')) {
+          console.log("⚠️ Already started, stopping and retrying...");
+          this.stop();
+          await this.delay(500);
+          try {
+            await this.recognition.start();
+            resolve();
+          } catch (retryError) {
+            reject(retryError);
+          }
+        } else {
+          reject(error);
         }
-
-        this.simulateStart();
-        resolve();
       }
     });
   }
 
-  private simulateStart(): void {
-    console.log("🎤 SpeechToText: Using simulated mode");
+  // FIXED: Stop with proper cleanup
+  stop(): void {
+    console.log("🛑 SpeechRecognition: STOP command received");
+    this.manualStop = true;
+    this.restartAttempts = this.maxRestartAttempts;
 
-    setTimeout(() => {
-      this.isListening = true;
-      this.events.onStart?.();
-      console.log("✅ SpeechToText: Simulated start complete");
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+        console.log("✅ Stop command sent");
+      } catch (error) {
+        console.warn("⚠️ Error stopping:", error);
+      }
+    }
 
-      // In simulated mode, auto-generate a response after 3 seconds
-      setTimeout(() => {
-        if (this.isListening && this.events.onTranscript) {
-          const simulatedResponses = [
-            "I have experience with React and TypeScript in production applications.",
-            "For state management, I prefer using Zustand or React Query depending on the use case.",
-            "I optimize performance with code splitting, memoization, and virtualized lists.",
-            "I implement accessibility features like ARIA labels and keyboard navigation.",
-            "My testing strategy includes unit tests with Jest and E2E tests with Cypress."
-          ];
-          const randomResponse = simulatedResponses[Math.floor(Math.random() * simulatedResponses.length)];
-          this.events.onTranscript?.(randomResponse, true);
-          this.stop();
-        }
-      }, 3000);
-    }, 100);
+    this.isListening = false;
+    this.isPaused = false;
+    this.clearSpeechTimeout();
   }
 
   pause(): void {
@@ -334,9 +340,9 @@ export class SpeechToText {
         this.recognition.stop();
         this.isPaused = true;
         this.clearSpeechTimeout();
-        console.log("⏸️ SpeechToText: Paused");
+        console.log("⏸️ Paused");
       } catch (error) {
-        console.warn("⚠️ SpeechToText: Error pausing:", error);
+        console.warn("⚠️ Error pausing:", error);
       }
     }
   }
@@ -346,79 +352,31 @@ export class SpeechToText {
       try {
         this.recognition.start();
         this.isPaused = false;
+        this.manualStop = false;
         this.startSpeechTimeout();
-        console.log("▶️ SpeechToText: Resumed");
+        console.log("▶️ Resumed");
       } catch (error) {
-        console.warn("⚠️ SpeechToText: Error resuming:", error);
+        console.warn("⚠️ Error resuming:", error);
       }
     }
   }
 
-  stop(): void {
-    console.log("🛑 SpeechToText: Stopping...");
-
-    if (this.recognition && this.isListening) {
-      try {
-        this.recognition.stop();
-      } catch (error) {
-        console.warn("⚠️ SpeechToText: Error stopping:", error);
-      }
-    }
-
-    this.isListening = false;
-    this.isPaused = false;
-    this.clearSpeechTimeout();
-    this.events.onEnd?.();
-  }
-
-  // ============ SETTINGS METHODS ============
+  // ============ SETTINGS ============
 
   setLanguage(language: string): void {
     if (this.recognition) {
       this.recognition.lang = language;
-      console.log("🌐 SpeechToText: Language set to", language);
+      console.log("🌐 Language set to", language);
     }
   }
-
-  setContinuous(continuous: boolean): void {
-    if (this.recognition) {
-      this.recognition.continuous = continuous;
-      console.log("🔄 SpeechToText: Continuous mode set to", continuous);
-    }
-  }
-
-  setInterimResults(interim: boolean): void {
-    if (this.recognition) {
-      this.recognition.interimResults = interim;
-      console.log("📝 SpeechToText: Interim results set to", interim);
-    }
-  }
-
-  setMaxSilenceDuration(seconds: number): void {
-    if (seconds >= 1 && seconds <= 60) {
-      this.maxSilenceDuration = seconds * 1000;
-      console.log("⏰ SpeechToText: Max silence duration set to", seconds, "seconds");
-    }
-  }
-
-  // ============ INTERVIEW-SPECIFIC METHODS ============
 
   setInterviewMode(enabled: boolean): void {
     this._interviewMode = enabled;
     if (enabled) {
-      this.maxSilenceDuration = 15000; // Longer for interviews
-      this.setLanguage("en-KE"); // Kenyan English
-      if (this.recognition) {
-        this.recognition.maxAlternatives = 5; // More alternatives for accent matching
-      }
-      console.log("🎤 SpeechToText: Interview mode enabled (15s timeout, en-KE, 5 alternatives)");
-    } else {
-      this.maxSilenceDuration = 10000;
+      this.maxSilenceDuration = 20000;
+      this.maxRestartAttempts = 10;
       this.setLanguage("en-US");
-      if (this.recognition) {
-        this.recognition.maxAlternatives = 3;
-      }
-      console.log("🎤 SpeechToText: Interview mode disabled");
+      console.log("🎤 Interview mode enabled");
     }
   }
 
@@ -466,115 +424,73 @@ export class SpeechToText {
     this.transcript = "";
     this.finalTranscript = "";
     this.interimTranscript = "";
-    console.log("🧹 SpeechToText: Transcript cleared");
+    console.log("🧹 Transcript cleared");
   }
 
   getIsListening(): boolean {
     return this.isListening;
   }
 
-  getIsPaused(): boolean {
-    return this.isPaused;
-  }
-
   isSupported(): boolean {
     if (typeof window === "undefined") return false;
-
-    try {
-      const SpeechRecognitionAPI = (window as any).SpeechRecognition ||
-                                  (window as any).webkitSpeechRecognition;
-      return !!SpeechRecognitionAPI;
-    } catch (error) {
-      return false;
-    }
+    return !!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition;
   }
 
+  // FIXED: More reliable permission check
   async checkMicrophonePermissions(): Promise<boolean> {
     try {
+      console.log("🎤 Checking microphone permissions...");
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          sampleRate: 44100,
+          channelCount: 1
         }
       });
 
-      // Stop all tracks to release the microphone
+      // Stop all tracks
       stream.getTracks().forEach(track => {
+        console.log(`🎤 Microphone track: ${track.label}`, {
+          enabled: track.enabled,
+          readyState: track.readyState
+        });
         track.stop();
       });
 
-      console.log("✅ SpeechToText: Microphone permission granted");
+      console.log("✅✅✅ Microphone permission GRANTED - Audio hardware is working");
+      this.permissionGranted = true;
       this.events.onPermissionChange?.(true);
       return true;
 
     } catch (error: any) {
-      console.log("❌ SpeechToText: Microphone permission denied:", error.name);
+      console.error("❌ Microphone permission DENIED:", error.name, error.message);
+      this.permissionGranted = false;
+      this.events.onPermissionChange?.(false);
 
-      let errorMessage = "Microphone permission denied";
+      let errorMessage = "Microphone access denied";
       if (error.name === 'NotFoundError') {
-        errorMessage = "No microphone found";
+        errorMessage = "No microphone found. Please connect a microphone.";
       } else if (error.name === 'NotReadableError') {
-        errorMessage = "Microphone is in use by another application";
+        errorMessage = "Microphone is in use by another application.";
+      } else if (error.name === 'NotAllowedError') {
+        errorMessage = "Microphone permission blocked. Please allow access in browser settings.";
       }
 
       this.events.onError?.(errorMessage);
-      this.events.onPermissionChange?.(false);
       return false;
     }
   }
 
-  // Browser compatibility check
-  getBrowserCompatibility(): {
-    supported: boolean;
-    browser: string;
-    details: string;
-  } {
-    if (typeof window === 'undefined') {
-      return { supported: false, browser: 'unknown', details: 'Not in browser' };
-    }
-
-    const userAgent = navigator.userAgent;
-    let browser = 'unknown';
-    let details = '';
-    let supported = false;
-
-    if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
-      browser = 'Chrome';
-      supported = true;
-      details = 'Full support with Web Speech API';
-    } else if (userAgent.includes('Edg')) {
-      browser = 'Edge';
-      supported = true;
-      details = 'Full support with Web Speech API';
-    } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
-      browser = 'Safari';
-      supported = true;
-      details = 'Limited support, may require user initiation';
-    } else if (userAgent.includes('Firefox')) {
-      browser = 'Firefox';
-      supported = false;
-      details = 'Limited support, requires about:config changes';
-    }
-
-    return { supported, browser, details };
-  }
-
-  printDiagnostics(): void {
-    console.log("🔍 SpeechToText Diagnostics:");
-    console.log("✅ Supported:", this.isSupported());
-    console.log("🎤 Listening:", this.isListening);
-    console.log("⏸️ Paused:", this.isPaused);
-    console.log("📝 Transcript:", this.transcript.substring(0, 50) + '...');
-    console.log("🎤 Interview mode:", this._interviewMode ? "Enabled" : "Disabled");
-    console.log("⏰ Timeout:", this.maxSilenceDuration / 1000, "seconds");
-
-    const compatibility = this.getBrowserCompatibility();
-    console.log("🌐 Browser:", compatibility.browser, "-", compatibility.details);
+  // FIXED: Force microphone test
+  async testMicrophone(): Promise<boolean> {
+    return this.checkMicrophonePermissions();
   }
 
   destroy(): void {
-    console.log("🧹 SpeechToText: Destroying...");
+    console.log("🧹 Destroying SpeechRecognition");
     this.stop();
     this.recognition = null;
     this.events = {};

@@ -1,10 +1,11 @@
-// components/Agent.tsx - COMPLETE UPDATED VERSION
+// components/Agent.tsx - COMPLETE FINAL VERSION WITH FIXED FEEDBACK FORMAT
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import VoiceService from "@/lib/voice/VoiceService";
+console.log("📦 VoiceService imported from: @/lib/voice/VoiceService");
 import { VoiceToggle } from "@/components/VoiceToggle";
 import { MPESAPaymentModal } from "@/components/Payment/MPESAPaymentModal";
 import { checkPaymentStatus } from "@/lib/payment/clientCheck";
@@ -62,6 +63,7 @@ const Agent = ({
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const [emotionalIntensity, setEmotionalIntensity] = useState(5);
   const [showEmotionalSupport, setShowEmotionalSupport] = useState(false);
+  const [feedbackCalled, setFeedbackCalled] = useState(false);
 
   const [debugInfo, setDebugInfo] = useState({
     callStatus: "INACTIVE",
@@ -75,6 +77,9 @@ const Agent = ({
     voiceMode: "SIMULATED" as "REAL" | "SIMULATED",
     serviceStatus: "NOT_INITIALIZED"
   });
+
+  // ============ FIX: Use ref to persist answers across renders ============
+  const answersRef = useRef<AnswerHistory[]>([]);
 
   // Initialize memory system
   const {
@@ -101,6 +106,51 @@ const Agent = ({
   // ============ FIX: PREVENT DUPLICATE PAYMENT CHECKS ============
   const paymentCheckRan = useRef(false);
   const paymentCheckId = useRef(`payment-check-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+
+  // ============ DEBUG: MONITOR TRANSCRIPT ============
+  useEffect(() => {
+    if (userTranscript) {
+      console.log("📝 Agent received transcript:", {
+        length: userTranscript.length,
+        preview: userTranscript.substring(0, 50),
+        hasContent: !!userTranscript.trim()
+      });
+    }
+  }, [userTranscript]);
+
+  // ============ MICROPHONE DIAGNOSTIC ============
+  useEffect(() => {
+    if (voiceEnabled && debugInfo.callStatus === "ACTIVE") {
+      console.log("🎤 Running microphone diagnostic...");
+
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      })
+        .then(stream => {
+          console.log("✅ Microphone is working and accessible!");
+          stream.getTracks().forEach(track => track.stop());
+          toast.success("🎤 Microphone connected successfully");
+        })
+        .catch(err => {
+          console.error("❌ Microphone error:", err.name, err.message);
+
+          let errorMessage = "Microphone access failed";
+          if (err.name === 'NotAllowedError') {
+            errorMessage = "Microphone permission denied. Please allow access in browser settings.";
+          } else if (err.name === 'NotFoundError') {
+            errorMessage = "No microphone found. Please connect a microphone.";
+          } else if (err.name === 'NotReadableError') {
+            errorMessage = "Microphone is in use by another application.";
+          }
+
+          toast.error(errorMessage);
+        });
+    }
+  }, [voiceEnabled, debugInfo.callStatus]);
 
   // ============ PERFORMANCE HELPER FUNCTIONS ============
   const calculateScores = useCallback((answerHistory: AnswerHistory[]) => {
@@ -505,16 +555,14 @@ const Agent = ({
     }
   }, [userId, interviewId, currentEmotion, detectEmotionFromText, detectEmotionFromBehavior, recordEmotionalState]);
 
-  // ============ PAYMENT CHECK ============
+  // ============ PAYMENT CHECK - READ ONLY, NO MARKING ============
   useEffect(() => {
-    // PREVENT DUPLICATE CHECKS - Only run once per component lifecycle
     if (paymentCheckRan.current) {
       console.log(`⏩ [${paymentCheckId.current}] Payment check already ran, skipping`);
       return;
     }
 
     const checkPayment = async () => {
-      // Mark as checked immediately to prevent duplicate calls
       paymentCheckRan.current = true;
 
       console.log(`🔄 [${paymentCheckId.current}] Starting ONE-TIME payment check...`);
@@ -542,6 +590,7 @@ const Agent = ({
         const paid = await checkPaymentStatus(interviewId, userId);
         console.log(`💰 [${paymentCheckId.current}] Payment status result:`, paid ? "PAID ✅" : "NOT PAID ❌");
         setHasPaid(paid);
+        setPaymentUsed(false);
       } catch (error) {
         console.error(`❌ [${paymentCheckId.current}] Payment check error:`, error);
         setHasPaid(false);
@@ -581,38 +630,6 @@ const Agent = ({
     } catch (error) {
       console.error("Detailed payment check error:", error);
       return null;
-    }
-  };
-
-  const markPaymentAsUsed = async () => {
-    if (!interviewId || !userId) return false;
-
-    try {
-      console.log("🔄 Marking payment as used...", { interviewId, userId });
-
-      const response = await fetch('/api/payment/mark-used', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interviewId, userId })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to mark payment: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        console.log("✅ Payment marked as used:", data.paymentId);
-        setPaymentUsed(true);
-        setHasPaid(false);
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error("❌ Error marking payment as used:", error);
-      return false;
     }
   };
 
@@ -753,6 +770,12 @@ const Agent = ({
     }
 
     try {
+      // ============ VOICE SERVICE CREATION WITH LOUD DEBUG ============
+      console.log("🔴🔴🔴 CREATING NEW VOICE SERVICE INSTANCE 🔴🔴🔴");
+      console.log("   Interview ID:", interviewId || `demo-${Date.now()}`);
+      console.log("   User ID:", currentUserId);
+      console.log("   Questions count:", questions.length);
+
       voiceServiceRef.current = new VoiceService({
         interviewId: interviewId || `demo-${Date.now()}`,
         userId: currentUserId,
@@ -760,6 +783,10 @@ const Agent = ({
         speechRate: 1.0,
         speechVolume: 0.8
       });
+
+      console.log("✅ VoiceService instance created successfully");
+      console.log("   Constructor type:", voiceServiceRef.current.constructor.name);
+      console.log("   Available methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(voiceServiceRef.current)));
 
       voiceServiceRef.current.setInterviewQuestions(questions);
 
@@ -781,6 +808,7 @@ const Agent = ({
         }));
       });
 
+      // ============ FIXED ONUPDATE CALLBACK - REBUILDS ANSWER HISTORY ============
       voiceServiceRef.current.onUpdate((messages) => {
         const userMessages = messages.filter(m => m.role === "user");
         const assistantMessages = messages.filter(m => m.role === "assistant");
@@ -800,50 +828,62 @@ const Agent = ({
           }
         }
 
-        if (userMessages.length > answerHistory.length) {
-          const latestAnswer = userMessages[userMessages.length - 1];
-          const latestQuestion = assistantMessages[assistantMessages.length - 1]?.content || `Question ${currentQ}`;
-          const questionText = latestQuestion.replace(`Question ${currentQ}: `, '');
+        // 🔥 FIXED: ALWAYS rebuild answer history from messages
+        const newAnswerHistory: AnswerHistory[] = [];
 
-          setAnswerHistory(prev => {
-            const newHistory = [...prev];
-            if (newHistory.length >= currentQ) {
-              newHistory[currentQ - 1] = {
-                question: questionText,
-                answer: latestAnswer.content,
-                questionNumber: currentQ,
-                timestamp: new Date(latestAnswer.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit'
-                })
-              };
-            } else {
-              newHistory.push({
-                question: questionText,
-                answer: latestAnswer.content,
-                questionNumber: currentQ,
-                timestamp: new Date(latestAnswer.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit'
-                })
-              });
-            }
-            return newHistory;
-          });
+        for (let i = 0; i < userMessages.length; i++) {
+          const msg = userMessages[i];
+          const questionMsg = assistantMessages[i];
 
-          if (userId && latestAnswer.content) {
-            const context = {
-              interviewId,
-              questionId: `q${currentQ}`,
-              questionDifficulty: 'medium',
-              timeIntoSession: 0,
-              currentScore: calculateScores(answerHistory).overall,
-              responseTime: 30000
-            };
-            analyzeUserEmotion(latestAnswer.content, context);
+          if (questionMsg) {
+            const questionNumber = i + 1;
+            let questionText = questionMsg.content;
+
+            // Clean up question text
+            questionText = questionText.replace(`Question ${questionNumber}: `, '');
+            questionText = questionText.replace(`Question ${questionNumber}. `, '');
+
+            newAnswerHistory.push({
+              question: questionText,
+              answer: msg.content,
+              questionNumber: questionNumber,
+              timestamp: new Date(msg.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              })
+            });
           }
+        }
+
+        // Log for debugging
+        console.log("📊 onUpdate - Building answer history:", {
+          userMessages: userMessages.length,
+          assistantMessages: assistantMessages.length,
+          newAnswerHistory: newAnswerHistory.length,
+          currentQ
+        });
+
+        // 🔴🔴🔴 ADDED: Detailed answer history debug
+        console.log("🔴🔴🔴 ANSWER HISTORY DETAILS:", {
+          newAnswerHistoryLength: newAnswerHistory.length,
+          userMessagesLength: userMessages.length,
+          assistantMessagesLength: assistantMessages.length,
+          firstQuestion: newAnswerHistory[0]?.question || 'none',
+          firstAnswer: newAnswerHistory[0]?.answer?.substring(0, 30) || 'none',
+          allQuestions: newAnswerHistory.map(a => a.questionNumber)
+        });
+
+        // Update state with complete answer history
+        if (newAnswerHistory.length > 0) {
+          setAnswerHistory(newAnswerHistory);
+          // 🔥 FIX: Also update the ref to persist answers
+          answersRef.current = newAnswerHistory;
+          console.log("✅ Answer history updated:", newAnswerHistory.length, "answers");
+          console.log("   Current answerHistory state after update:", newAnswerHistory.length);
+          console.log("   Answers ref now has:", answersRef.current.length, "answers");
+        } else {
+          console.warn("⚠️ No answers in newAnswerHistory despite having", userMessages.length, "user messages");
         }
 
         setDebugInfo(prev => ({
@@ -852,10 +892,34 @@ const Agent = ({
           collectedAnswers: userMessages.length,
           currentQuestion: currentQ
         }));
+
+        if (userId && userMessages.length > 0) {
+          const latestAnswer = userMessages[userMessages.length - 1];
+          const context = {
+            interviewId,
+            questionId: `q${currentQ}`,
+            questionDifficulty: 'medium',
+            timeIntoSession: 0,
+            currentScore: calculateScores(newAnswerHistory).overall,
+            responseTime: 30000
+          };
+          analyzeUserEmotion(latestAnswer.content, context);
+        }
       });
 
+      // ============ FIXED ONCOMPLETE CALLBACK WITH ANSWER REF ============
       voiceServiceRef.current.onComplete((data) => {
-        console.log("🎉 Interview completed:", data);
+        console.log("🎉🎉🎉 VOICE SERVICE ONCOMPLETE FIRED! 🎉🎉🎉");
+        console.log("📦 Completion data:", data);
+        console.log("🔴🔴🔴 ANSWER HISTORY REF AT COMPLETION:", {
+          length: answersRef.current.length,
+          answers: answersRef.current
+        });
+
+        // 🔥 FIX: Use ref instead of state - this NEVER gets cleared
+        const capturedAnswers = [...answersRef.current];
+        console.log("📝 Captured answers for feedback:", capturedAnswers.length);
+
         setIsLoading(false);
 
         setDebugInfo(prev => ({
@@ -866,7 +930,8 @@ const Agent = ({
           serviceStatus: "COMPLETED"
         }));
 
-        handleInterviewCompletion(data);
+        // Pass both data and captured answers
+        handleInterviewCompletion(data, capturedAnswers);
       });
 
       setDebugInfo(prev => ({ ...prev, serviceStatus: "READY" }));
@@ -912,16 +977,82 @@ const Agent = ({
     };
   }, []);
 
-  const handleInterviewCompletion = async (data: any) => {
-    console.log("🎉 Interview completion data received:", data);
+  // ============ FIXED FEEDBACK API CALL ============
+  const callFeedbackAPI = async (interviewId: string, userId: string, answers: AnswerHistory[]) => {
+    if (!interviewId || !userId || answers.length === 0) {
+      console.log("⚠️ Cannot call feedback API - missing data");
+      return false;
+    }
 
     try {
-      const scores = calculateScores(answerHistory);
-      const weakAreasList = identifyWeakAreas(answerHistory);
-      const strongAreasList = identifyStrongAreas(answerHistory);
-      const recommendations = generateInterviewRecommendations(answerHistory);
+      // 🔥 FIX: Format answers to match what the API expects
+      const formattedTranscript = answers.flatMap(a => [
+        { role: "assistant", content: `Question ${a.questionNumber}: ${a.question}` },
+        { role: "user", content: a.answer }
+      ]);
 
-      const questionPerformance = answerHistory.map((item, index) => {
+      console.log("📤 Calling feedback API with", answers.length, "answers");
+      console.log("📤 Formatted transcript:", formattedTranscript);
+
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interviewId,
+          userId,
+          transcript: formattedTranscript // 🔥 Send formatted version
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Feedback API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("✅ Feedback API called successfully:", data);
+      return true;
+    } catch (error) {
+      console.error("❌ Feedback API call failed:", error);
+      return false;
+    }
+  };
+
+  // ============ INTERVIEW COMPLETION HANDLER - WITH CAPTURED ANSWERS ============
+  const handleInterviewCompletion = async (data: any, capturedAnswers?: AnswerHistory[]) => {
+    // Use captured answers if provided, otherwise fall back to state
+    const answersToUse = capturedAnswers || answerHistory;
+
+    console.log("🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥");
+    console.log("🔥 handleInterviewCompletion FIRED! 🔥");
+    console.log("🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥");
+    console.log("📊 Data:", {
+      hasAnswers: answersToUse.length,
+      interviewId,
+      userId,
+      dataInterviewId: data?.interviewId,
+      dataUserId: data?.userId
+    });
+
+    console.log("🔍 FEEDBACK CONDITION CHECK:", {
+      userId: !!userId,
+      interviewIdExists: !!(data.interviewId || interviewId),
+      hasAnswers: answersToUse.length > 0,
+      answerCount: answersToUse.length,
+      dataInterviewId: data?.interviewId,
+      propInterviewId: interviewId,
+      willCallAPI: !!(userId && (data.interviewId || interviewId) && answersToUse.length > 0)
+    });
+
+    console.log("🎉 Interview completion data received:", data);
+    console.log("📝 Answer history (captured):", answersToUse);
+
+    try {
+      const scores = calculateScores(answersToUse);
+      const weakAreasList = identifyWeakAreas(answersToUse);
+      const strongAreasList = identifyStrongAreas(answersToUse);
+      const recommendations = generateInterviewRecommendations(answersToUse);
+
+      const questionPerformance = answersToUse.map((item, index) => {
         const startTime = questionStartTimes[item.questionNumber] || Date.now() - 60000;
         const timeSpent = Math.round((Date.now() - startTime) / 1000);
 
@@ -956,8 +1087,8 @@ const Agent = ({
         recommendations: recommendations,
         metadata: {
           totalQuestions: questions.length,
-          answeredQuestions: answerHistory.length,
-          completionRate: Math.round((answerHistory.length / questions.length) * 100),
+          answeredQuestions: answersToUse.length,
+          completionRate: Math.round((answersToUse.length / questions.length) * 100),
           interviewType: "practice",
           timestamp: new Date().toISOString()
         }
@@ -975,6 +1106,29 @@ const Agent = ({
         } else {
           console.log("⚠️ Failed to save performance data");
         }
+      }
+
+      if (userId && (data.interviewId || interviewId) && answersToUse.length > 0) {
+        console.log("🤖🤖🤖 CALLING FEEDBACK API WITH ANSWERS! 🤖🤖🤖");
+        console.log("📤 Sending:", {
+          interviewId: data.interviewId || interviewId,
+          userId,
+          answerCount: answersToUse.length
+        });
+
+        await callFeedbackAPI(
+          data.interviewId || interviewId,
+          userId,
+          answersToUse
+        );
+        setFeedbackCalled(true);
+      } else {
+        console.log("❌❌❌ FEEDBACK CONDITION FAILED - NOT CALLING API ❌❌❌");
+        console.log("🔍 Failure reasons:", {
+          noUserId: !userId,
+          noInterviewId: !(data.interviewId || interviewId),
+          noAnswers: answersToUse.length === 0
+        });
       }
 
       if (userId && (data.interviewId || interviewId)) {
@@ -1031,12 +1185,14 @@ const Agent = ({
     }
 
     if (resumeData.answerHistory) {
-      setAnswerHistory(resumeData.answerHistory.map((item: any) => ({
+      const history = resumeData.answerHistory.map((item: any) => ({
         question: item.question,
         answer: item.answer,
         questionNumber: item.questionNumber,
         timestamp: item.timestamp
-      })));
+      }));
+      setAnswerHistory(history);
+      answersRef.current = history; // 🔥 Also update ref on resume
     }
 
     if (resumeData.currentQuestion) {
@@ -1100,24 +1256,16 @@ const Agent = ({
       return;
     }
 
-    if (interviewId && userId && hasPaid && !paymentUsed) {
-      const marked = await markPaymentAsUsed();
-      if (!marked) {
-        toast.error("Could not verify payment status. Please try again.");
-        return;
-      }
-
-      toast.info("💰 Payment consumed for this interview attempt");
-    }
-
     if (!showResumeModal) {
       setAnswerHistory([]);
+      answersRef.current = []; // 🔥 Clear ref on new interview
       setUserTranscript("");
       setCurrentQuestionText("");
       setQuestionStartTimes({});
       setPerformanceSaved(false);
       setCurrentEmotion(null);
       setEmotionalIntensity(5);
+      setFeedbackCalled(false);
     }
 
     setIsLoading(true);
@@ -1158,7 +1306,6 @@ const Agent = ({
     if (voiceServiceRef.current) {
       try {
         await voiceServiceRef.current.submitAnswer();
-        setUserTranscript("");
       } catch (error) {
         console.error("❌ Failed to submit answer:", error);
         toast.error("Failed to submit answer");
@@ -1172,7 +1319,6 @@ const Agent = ({
     if (voiceServiceRef.current) {
       try {
         await voiceServiceRef.current.skipQuestion();
-        setUserTranscript("");
       } catch (error) {
         console.error("❌ Failed to skip question:", error);
         toast.error("Failed to skip question");
@@ -1847,7 +1993,7 @@ const Agent = ({
                   {performanceSaved ? "Performance data saved!" : "Saving performance data..."}
                 </p>
                 <p className="text-green-600 text-xs mt-1">
-                  {performanceSaved ? "View your performance analysis" : "Analyzing your answers..."}
+                  {feedbackCalled ? "Feedback generated!" : "Generating feedback..."}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -2022,7 +2168,7 @@ const Agent = ({
         />
       )}
 
-      {/* MPESA Payment Modal */}
+      {/* MPESA Payment Modal - SINGLE SOURCE OF TRUTH */}
       <MPESAPaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}

@@ -15,15 +15,53 @@ import DisplayTechIcons from "@/components/DisplayTechIcons";
 const InterviewDetails = async ({ params }: RouteParams) => {
   const { id } = await params;
 
-  const user = await getCurrentUser();
+  console.log("🔴🔴🔴 INTERVIEW PAGE LOADED 🔴🔴🔴");
+  console.log("Interview ID:", id);
 
-  const interview = await getInterviewById(id);
-  if (!interview) redirect("/");
+  const user = await getCurrentUser();
+  console.log("Current user:", user?.id);
+
+  let interview = await getInterviewById(id);
+  console.log("Interview data:", {
+    exists: !!interview,
+    role: interview?.role,
+    type: interview?.type,
+    questionsCount: interview?.questions?.length,
+    questions: interview?.questions,
+    techstack: interview?.techstack
+  });
+
+  if (!interview) {
+    console.log("❌ Interview not found, redirecting...");
+    redirect("/");
+  }
+
+  // 🔥 FIX: If interview has no questions, create default ones
+  if (!interview.questions || interview.questions.length === 0) {
+    console.log("⚠️⚠️⚠️ No questions found in interview! Using default questions ⚠️⚠️⚠️");
+
+    // Create a copy of interview with default questions
+    interview = {
+      ...interview,
+      questions: [
+        "Tell me about your experience in this role.",
+        "What are your greatest strengths and weaknesses?",
+        "Describe a challenging project you worked on.",
+        "How do you handle stressful situations?",
+        "Where do you see yourself in 5 years?"
+      ]
+    };
+
+    console.log("✅ Added 5 default questions to interview");
+  }
 
   const feedback = await getFeedbackByInterviewId({
     interviewId: id,
     userId: user?.id!,
   });
+
+  console.log("Feedback exists:", !!feedback);
+  console.log("✅ Passing questions to Agent:", interview.questions.length);
 
   return (
     <>
@@ -50,11 +88,10 @@ const InterviewDetails = async ({ params }: RouteParams) => {
 
       <Agent
         userName={user?.name!}
-        userId={user?.id}  // ← Make sure this is passed
+        userId={user?.id}
         interviewId={id}
-        //type="interview"
-        questions={interview.questions}
-        //feedbackId={feedback?.id}
+        questions={interview.questions}  // Now guaranteed to have questions!
+        profileImage={user?.profileURL}
       />
     </>
   );
