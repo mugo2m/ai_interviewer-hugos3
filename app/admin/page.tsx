@@ -1,4 +1,8 @@
-// app/admin/page.tsx (or wherever you want the dashboard)
+// app/admin/page.tsx
+// ✅ ADD THESE LINES AT THE VERY TOP
+export const runtime = 'nodejs';
+export const dynamic = 'force-static';
+
 import { FirebaseCacheDashboard } from '@/components/FirebaseCacheDashboard';
 
 export default function AdminPage() {
