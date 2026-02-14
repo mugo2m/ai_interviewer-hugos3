@@ -1,4 +1,9 @@
-import * as Daraja from 'daraja';
+import Daraja from 'daraja';
+// Check what Daraja actually is
+console.log(typeof Daraja); // Helps debug
+
+// If it's a function, call it directly
+const mpesa = Daraja(config);
 import { v4 as uuidv4 } from 'uuid';
 
 export interface MPESAPaymentRequest {
