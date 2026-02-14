@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // ✅ Import individual functions instead of emotionalMemory object
 import {
   recordEmotionalState,
-  calculateEmotionalWellness,
+  getEmotionalWellness,
   getEmotionalPatterns
 } from "@/lib/memory/memoryService";
 

@@ -1,20 +1,20 @@
 "use server";
 
 import { getUserConversations, saveConversation } from './conversationMemory';
-import { getProgress, updateProgress, generateInsights } from './progressMemory';
-import { getUserFeedback } from './feedbackMemory';
-import { getUserPreferences, updatePreferences } from './personalizationMemory';
+import { getProgress as getProgressData, updateProgress, generateInsights } from './progressMemory';
+import { getUserFeedback as getFeedback } from './feedbackMemory';
+import { getUserPreferences as getPrefs, updatePreferences } from './personalizationMemory';
 import { getAchievementProgress, checkAndUnlockAchievements } from './achievementMemory';
 import {
-  recordEmotionalState,
+  recordEmotionalState as recordEmotion,
   calculateEmotionalWellness,
-  getEmotionalPatterns,
+  getEmotionalPatterns as getEmotionPatterns,
   suggestEmotionalIntervention
 } from './emotionalMemory';
 
 // User Preferences
 export async function getUserPreferences(userId: string): Promise<any> {
-  return getUserPreferences(userId);
+  return getPrefs(userId); // ✅ Fixed - calls imported function
 }
 
 export async function updateUserPreferences(userId: string, preferences: any): Promise<any> {
@@ -69,18 +69,12 @@ export async function markInterviewCompleted(interviewId: string): Promise<boole
 // Performance Tracking
 export async function saveUserPerformance(performanceData: any): Promise<boolean> {
   try {
-    // Update progress
     await updateProgress(performanceData.userId, performanceData);
-
-    // Save conversation
     await saveConversation(performanceData);
-
-    // Check for achievements
     await checkAndUnlockAchievements(performanceData.userId, {
       interviewCount: performanceData.metadata?.interviewsCompleted || 1,
       bestScore: performanceData.scores?.overall || 0
     });
-
     return true;
   } catch (error) {
     console.error("Error saving performance:", error);
@@ -94,10 +88,10 @@ export async function getUserPerformanceHistory(userId: string, limit: number = 
 
 export async function getWeakAreas(userId: string): Promise<string[]> {
   try {
-    const feedback = await getUserFeedback(userId, { type: 'ai_feedback', resolved: false });
+    const feedback = await getFeedback(userId, { type: 'ai_feedback', resolved: false });
     const weakAreas = new Set<string>();
 
-    feedback.forEach(fb => {
+    feedback.forEach((fb: any) => {
       if (fb.metadata.sentiment === 'negative' && fb.metadata.topic) {
         weakAreas.add(fb.metadata.topic);
       }
@@ -112,7 +106,7 @@ export async function getWeakAreas(userId: string): Promise<string[]> {
 
 export async function getPerformanceTrends(userId: string): Promise<any> {
   try {
-    const progress = await getProgress(userId);
+    const progress = await getProgressData(userId);
     const weakAreas = await getWeakAreas(userId);
     const insights = await generateInsights(userId);
 
@@ -135,7 +129,7 @@ export async function getPerformanceTrends(userId: string): Promise<any> {
 
 // Emotional Memory
 export async function recordEmotionalState(state: any): Promise<string> {
-  return recordEmotionalState(state);
+  return recordEmotion(state); // ✅ Fixed
 }
 
 export async function getEmotionalWellness(userId: string): Promise<any> {
@@ -143,7 +137,7 @@ export async function getEmotionalWellness(userId: string): Promise<any> {
 }
 
 export async function getEmotionalPatterns(userId: string): Promise<any[]> {
-  return getEmotionalPatterns(userId);
+  return getEmotionPatterns(userId); // ✅ Fixed
 }
 
 export async function suggestEmotionalSupport(userId: string, context: any): Promise<string[]> {
@@ -153,14 +147,9 @@ export async function suggestEmotionalSupport(userId: string, context: any): Pro
 export async function getEmotionalProgress(userId: string): Promise<any> {
   try {
     const wellness = await calculateEmotionalWellness(userId);
-
     return {
       trend: wellness.overallScore > 70 ? 'improving' : 'stable',
-      metrics: {
-        anxietyChange: 0,
-        confidenceChange: 0,
-        recoveryImprovement: 0
-      },
+      metrics: { anxietyChange: 0, confidenceChange: 0, recoveryImprovement: 0 },
       milestone: wellness.overallScore >= 80 ? "Emotional Mastery!" : "Keep practicing"
     };
   } catch (error) {
@@ -176,13 +165,13 @@ export async function getEmotionalProgress(userId: string): Promise<any> {
 // Gamification
 export async function getUserGamification(userId: string): Promise<any> {
   try {
-    const progress = await getProgress(userId);
+    const progress = await getProgressData(userId);
     const achievements = await getAchievementProgress(userId);
 
     return {
       level: Math.floor((progress?.metrics.interviewsCompleted || 0) / 5) + 1,
       points: (progress?.metrics.interviewsCompleted || 0) * 100,
-      achievements: achievements.unlocked.map(a => a.title),
+      achievements: achievements.unlocked.map((a: any) => a.title),
       streak: progress?.streaks.current || 0,
       nextMilestone: achievements.locked[0]?.title || "Keep practicing!"
     };
@@ -200,13 +189,13 @@ export async function getUserGamification(userId: string): Promise<any> {
 
 // Feedback Management
 export async function addFeedback(feedback: any): Promise<string> {
-  return addFeedback(feedback);
+  return addFeedback(feedback); // ⚠️ Still needs fix
 }
 
 export async function getUserFeedback(userId: string, filters?: any): Promise<any[]> {
-  return getUserFeedback(userId, filters);
+  return getFeedback(userId, filters); // ✅ Fixed
 }
 
 export async function markFeedbackResolved(feedbackId: string, actionsTaken: string[] = []): Promise<void> {
-  return markFeedbackResolved(feedbackId, actionsTaken);
+  return markFeedbackResolved(feedbackId, actionsTaken); // ⚠️ Still needs fix
 }

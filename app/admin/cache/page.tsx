@@ -1,10 +1,10 @@
 // app/admin/cache/page.tsx
+
+
+"use client";
 // ✅ Add Node.js runtime directive at the TOP
 export const runtime = 'nodejs';
 export const dynamic = 'force-static';
-
-"use client";
-
 import { useState, useEffect } from 'react';
 // ⚠️ This import needs to be fixed - you need a client-safe version
 // For now, let's comment it out and use mock data
