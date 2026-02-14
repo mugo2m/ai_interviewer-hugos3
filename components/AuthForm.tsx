@@ -87,7 +87,8 @@ const AuthForm = ({ type }: { type: FormType }) => {
         });
 
         toast.success("Signed in successfully.");
-        router.push("/");
+        // 🔥 FIX: Force hard reload to ensure auth state is loaded
+        window.location.href = "/";
       }
     } catch (error) {
       console.log(error);
