@@ -3,6 +3,12 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+// 🔥 MODULE LOADED DEBUG
+console.log("🔥 Module loaded: firebase/admin.ts");
+
+// Global flag to track initialization across module reloads
+let isFirebaseInitialized = false;
+
 // DEBUG: Check environment variables at the very start
 console.log("🔍 DEBUG - FIREBASE_CONFIG exists?", process.env.FIREBASE_CONFIG ? "YES" : "NO");
 console.log("🔍 DEBUG - FIREBASE_CONFIG length:", process.env.FIREBASE_CONFIG?.length || 0);
@@ -10,6 +16,14 @@ console.log("🔍 DEBUG - FIREBASE_CONFIG length:", process.env.FIREBASE_CONFIG?
 console.log("🔥 [Firebase Admin] Initializing Firebase Admin SDK...");
 
 function initFirebaseAdmin() {
+  // Check if already initialized globally
+  if (isFirebaseInitialized) {
+    console.log("⚠️ Firebase already initialized globally, skipping re-initialization...");
+    const auth = getAuth();
+    const db = getFirestore();
+    return { auth, db };
+  }
+
   const apps = getApps();
 
   if (!apps.length) {
@@ -93,6 +107,10 @@ function initFirebaseAdmin() {
   // Apply settings right away
   db.settings({ ignoreUndefinedProperties: true });
   console.log("✅ [Firebase Admin] ignoreUndefinedProperties enabled");
+
+  // Mark as initialized globally
+  isFirebaseInitialized = true;
+  console.log("🔒 Firebase global initialization flag set");
 
   return { auth, db };
 }
