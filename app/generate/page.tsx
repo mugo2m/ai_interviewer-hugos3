@@ -1,7 +1,10 @@
 // app/generate/page.tsx - GENERATE PAGE
 import CreateInterviewAgent from "@/components/CreateInterviewAgent";
-import { getCurrentUser } from "@/lib/actions/auth.action"; // Add this import!
+import { getCurrentUser } from "@/lib/actions/auth.action";
 import { redirect } from "next/navigation";
+
+// 🔥 ADD THIS LINE - Forces dynamic rendering, skips build-time static generation
+export const dynamic = 'force-dynamic';
 
 const Page = async () => {
   const user = await getCurrentUser();
