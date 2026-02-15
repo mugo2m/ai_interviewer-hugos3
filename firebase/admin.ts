@@ -83,9 +83,12 @@ function initFirebaseAdmin() {
   const auth = getAuth();
   const db = getFirestore();
 
-  // CRITICAL FIX: Call settings immediately after getting db, before any other operations
   console.log("✅ [Firebase Admin] Auth service initialized");
   console.log("✅ [Firebase Admin] Firestore service initialized");
+
+  // 🔍 ADD STACK TRACE TO SEE WHAT'S CALLING THIS
+  console.log("🔍 About to call db.settings() - STACK TRACE:");
+  console.log(new Error().stack);
 
   // Apply settings right away
   db.settings({ ignoreUndefinedProperties: true });
