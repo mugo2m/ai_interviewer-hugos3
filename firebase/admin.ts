@@ -3,6 +3,11 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+// DEBUG: Check environment variables at the very start
+console.log("🔍 DEBUG - FIREBASE_CONFIG exists?", process.env.FIREBASE_CONFIG ? "YES" : "NO");
+console.log("🔍 DEBUG - FIREBASE_CONFIG length:", process.env.FIREBASE_CONFIG?.length || 0);
+console.log("🔍 DEBUG - FIREBASE_CONFIG first 50 chars:", process.env.FIREBASE_CONFIG?.substring(0, 50));
+
 console.log("🔥 [Firebase Admin] Initializing Firebase Admin SDK...");
 
 function initFirebaseAdmin() {
@@ -16,14 +21,23 @@ function initFirebaseAdmin() {
 
     if (firebaseConfig) {
       console.log("✅ Found FIREBASE_CONFIG, using single config approach...");
+      console.log("🔍 FIREBASE_CONFIG type:", typeof firebaseConfig);
+      console.log("🔍 FIREBASE_CONFIG length:", firebaseConfig.length);
+
       try {
         const serviceAccount = JSON.parse(firebaseConfig);
+        console.log("✅ Successfully parsed service account JSON");
+        console.log("   - Project ID:", serviceAccount.project_id);
+        console.log("   - Client Email:", serviceAccount.client_email);
+        console.log("   - Private Key exists:", !!serviceAccount.private_key);
+
         initializeApp({
           credential: cert(serviceAccount),
         });
         console.log("✅ [Firebase Admin] Initialized with FIREBASE_CONFIG");
       } catch (error) {
-        console.error("❌ Failed to parse FIREBASE_CONFIG:", error);
+        console.error("❌ Failed to parse FIREBASE_CONFIG:", error.message);
+        console.error("❌ Error details:", error);
         throw error;
       }
     } else {
