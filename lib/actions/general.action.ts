@@ -340,6 +340,17 @@ export async function getFeedbackByInterviewId(params: {
 }): Promise<any> {
   const { interviewId, userId } = params;
 
+  // Add guard for undefined userId
+  if (!userId) {
+    console.log("No userId provided for feedback lookup, returning null");
+    return null;
+  }
+
+  if (!interviewId) {
+    console.log("No interviewId provided for feedback lookup, returning null");
+    return null;
+  }
+
   try {
     const querySnapshot = await db
       .collection("feedback")
@@ -364,6 +375,12 @@ export async function getLatestInterviews(params: {
 }): Promise<any[]> {
   const { userId, limit = 20 } = params;
 
+  // Add guard for undefined userId
+  if (!userId) {
+    console.log("No userId provided for latest interviews, returning empty array");
+    return [];
+  }
+
   try {
     const snapshot = await db
       .collection("interviews")
@@ -385,6 +402,12 @@ export async function getLatestInterviews(params: {
 }
 
 export async function getInterviewsByUserId(userId: string): Promise<any[]> {
+  // Add guard for undefined userId - THIS FIXES THE ERROR!
+  if (!userId) {
+    console.log("No userId provided for getInterviewsByUserId, returning empty array");
+    return [];
+  }
+
   try {
     const interviews = await db
       .collection("interviews")
