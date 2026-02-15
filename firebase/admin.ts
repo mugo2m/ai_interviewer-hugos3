@@ -11,33 +11,51 @@ function initFirebaseAdmin() {
   if (!apps.length) {
     console.log("🔥 [Firebase Admin] No Firebase app found, initializing new one...");
 
-    // Environment variables
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    // Try single config first (for Vercel)
+    const firebaseConfig = process.env.FIREBASE_CONFIG;
 
-    console.log("🔥 [Firebase Admin] Environment check:");
-    console.log("   - FIREBASE_PROJECT_ID:", projectId ? `✅ (${projectId.substring(0, 10)}...)` : "❌ MISSING");
-    console.log("   - FIREBASE_CLIENT_EMAIL:", clientEmail ? `✅ (${clientEmail})` : "❌ MISSING");
-    console.log("   - FIREBASE_PRIVATE_KEY:", privateKey ? "✅ SET" : "❌ MISSING");
+    if (firebaseConfig) {
+      console.log("✅ Found FIREBASE_CONFIG, using single config approach...");
+      try {
+        const serviceAccount = JSON.parse(firebaseConfig);
+        initializeApp({
+          credential: cert(serviceAccount),
+        });
+        console.log("✅ [Firebase Admin] Initialized with FIREBASE_CONFIG");
+      } catch (error) {
+        console.error("❌ Failed to parse FIREBASE_CONFIG:", error);
+        throw error;
+      }
+    } else {
+      // Fallback to individual env vars (for local development)
+      console.log("Using individual env vars approach...");
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    if (!projectId || !clientEmail || !privateKey) {
-      console.error("❌ [Firebase Admin] Missing required environment variables!");
-      throw new Error("Firebase Admin environment variables are not set");
-    }
+      console.log("🔥 [Firebase Admin] Environment check:");
+      console.log("   - FIREBASE_PROJECT_ID:", projectId ? `✅ (${projectId.substring(0, 10)}...)` : "❌ MISSING");
+      console.log("   - FIREBASE_CLIENT_EMAIL:", clientEmail ? `✅ (${clientEmail})` : "❌ MISSING");
+      console.log("   - FIREBASE_PRIVATE_KEY:", privateKey ? "✅ SET" : "❌ MISSING");
 
-    try {
-      initializeApp({
-        credential: cert({
-          projectId,
-          clientEmail,
-          privateKey: privateKey.replace(/\\n/g, "\n"),
-        }),
-      });
-      console.log("✅ [Firebase Admin] Firebase Admin SDK initialized successfully");
-    } catch (error) {
-      console.error("❌ [Firebase Admin] Failed to initialize Firebase Admin SDK:", error);
-      throw error;
+      if (!projectId || !clientEmail || !privateKey) {
+        console.error("❌ [Firebase Admin] Missing required environment variables!");
+        throw new Error("Firebase Admin environment variables are not set");
+      }
+
+      try {
+        initializeApp({
+          credential: cert({
+            projectId,
+            clientEmail,
+            privateKey: privateKey.replace(/\\n/g, "\n"),
+          }),
+        });
+        console.log("✅ [Firebase Admin] Firebase Admin SDK initialized successfully");
+      } catch (error) {
+        console.error("❌ [Firebase Admin] Failed to initialize Firebase Admin SDK:", error);
+        throw error;
+      }
     }
   } else {
     console.log("✅ [Firebase Admin] Using existing Firebase app");
