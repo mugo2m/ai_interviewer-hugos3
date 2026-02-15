@@ -83,10 +83,12 @@ function initFirebaseAdmin() {
   const auth = getAuth();
   const db = getFirestore();
 
-  // Fix 2: Enable ignoreUndefinedProperties to prevent the undefined error
-  db.settings({ ignoreUndefinedProperties: true });
+  // CRITICAL FIX: Call settings immediately after getting db, before any other operations
+  console.log("✅ [Firebase Admin] Auth service initialized");
+  console.log("✅ [Firebase Admin] Firestore service initialized");
 
-  console.log("✅ [Firebase Admin] Auth and Firestore services initialized");
+  // Apply settings right away
+  db.settings({ ignoreUndefinedProperties: true });
   console.log("✅ [Firebase Admin] ignoreUndefinedProperties enabled");
 
   return { auth, db };
