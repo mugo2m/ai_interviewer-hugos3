@@ -131,7 +131,7 @@ function calculateManualScores(transcript: any[]) {
 }
 
 // IMPROVED: Fallback feedback with real answer analysis
-function generateFallbackFeedback(transcript: any[], interviewId: string, userId: string) {
+function generateFallbackFeedback(transcript: any[], interviewId: string, userId: string, retakeNumber: number = 1) {
   const {
     totalScore,
     techScore,
@@ -178,6 +178,11 @@ function generateFallbackFeedback(transcript: any[], interviewId: string, userId
     finalAssessment = `Interview completed with ${answerCount} questions. Focus on providing more detailed, structured responses.`;
   }
 
+  // Add retake info to assessment
+  if (retakeNumber > 1) {
+    finalAssessment += ` (Attempt #${retakeNumber})`;
+  }
+
   return {
     id: db.collection("feedback").doc().id,
     interviewId,
@@ -193,7 +198,9 @@ function generateFallbackFeedback(transcript: any[], interviewId: string, userId
     areasForImprovement: improvements.slice(0, 3),
     finalAssessment,
     createdAt: new Date().toISOString(),
-    source: "fallback"
+    source: "fallback",
+    retakeNumber,
+    originalInterviewId: interviewId
   };
 }
 
@@ -211,6 +218,21 @@ export async function createFeedback(params: CreateFeedbackParams) {
     let feedback;
     let source = "unknown";
 
+    // 🔥 NEW: Check for previous feedbacks to determine retake number
+    let retakeNumber = 1;
+    try {
+      const previousFeedbacks = await db
+        .collection("feedback")
+        .where("interviewId", "==", interviewId)
+        .where("userId", "==", userId)
+        .get();
+
+      retakeNumber = previousFeedbacks.size + 1;
+      console.log(`📊 This is attempt #${retakeNumber} for interview ${interviewId}`);
+    } catch (error) {
+      console.log("⚠️ Could not determine retake number, using default 1");
+    }
+
     // Log incoming transcript structure for debugging
     console.log("📥 Feedback API received transcript:", {
       type: Array.isArray(transcript) ? 'array' : typeof transcript,
@@ -225,7 +247,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
 
         if (qaPairs.length === 0) {
           console.log("⚠️ No Q&A pairs found, using fallback");
-          feedback = generateFallbackFeedback(transcript, interviewId, userId);
+          feedback = generateFallbackFeedback(transcript, interviewId, userId, retakeNumber);
           source = "fallback-no-answers";
         } else {
           const formattedTranscript = qaPairs
@@ -265,30 +287,34 @@ Return ONLY the JSON object. No other text, no markdown, no explanation.
                     score: Number(cat.score) || 0,
                     comment: cat.comment || ''
                   }))
-                : generateFallbackFeedback(transcript, interviewId, userId).categoryScores,
+                : generateFallbackFeedback(transcript, interviewId, userId, retakeNumber).categoryScores,
               strengths: Array.isArray(object.strengths) && object.strengths.length > 0
                 ? object.strengths
-                : generateFallbackFeedback(transcript, interviewId, userId).strengths,
+                : generateFallbackFeedback(transcript, interviewId, userId, retakeNumber).strengths,
               areasForImprovement: Array.isArray(object.areasForImprovement) && object.areasForImprovement.length > 0
                 ? object.areasForImprovement
-                : generateFallbackFeedback(transcript, interviewId, userId).areasForImprovement,
-              finalAssessment: object.finalAssessment || generateFallbackFeedback(transcript, interviewId, userId).finalAssessment,
+                : generateFallbackFeedback(transcript, interviewId, userId, retakeNumber).areasForImprovement,
+              finalAssessment: object.finalAssessment || generateFallbackFeedback(transcript, interviewId, userId, retakeNumber).finalAssessment,
               createdAt: new Date().toISOString(),
+              // 🔥 NEW FIELDS FOR RETAKE TRACKING
+              retakeNumber,
+              originalInterviewId: interviewId,
+              feedbackId: `${interviewId}_take${retakeNumber}`
             };
             source = "gemini";
           } catch (parseError) {
             console.error("❌ Failed to parse Gemini response:", parseError);
-            feedback = generateFallbackFeedback(transcript, interviewId, userId);
+            feedback = generateFallbackFeedback(transcript, interviewId, userId, retakeNumber);
             source = "fallback-parse-error";
           }
         }
       } catch (geminiError: any) {
         console.log("⚠️ Gemini failed, using fallback:", geminiError.message);
-        feedback = generateFallbackFeedback(transcript, interviewId, userId);
+        feedback = generateFallbackFeedback(transcript, interviewId, userId, retakeNumber);
         source = "fallback-after-gemini";
       }
     } else {
-      feedback = generateFallbackFeedback(transcript, interviewId, userId);
+      feedback = generateFallbackFeedback(transcript, interviewId, userId, retakeNumber);
       source = "fallback-no-api";
     }
 
@@ -305,13 +331,13 @@ Return ONLY the JSON object. No other text, no markdown, no explanation.
 
     await docRef.set(feedback, { merge: true });
 
-    console.log(`✅ Feedback created (${source}):`, docRef.id);
+    console.log(`✅ Feedback created (${source}) for attempt #${retakeNumber}:`, docRef.id);
     console.log(`📊 Scores:`, {
       total: feedback.totalScore,
       categories: feedback.categoryScores.map((c: any) => `${c.name}: ${c.score}`)
     });
 
-    return { success: true, feedbackId: docRef.id, source, feedback };
+    return { success: true, feedbackId: docRef.id, source, feedback, retakeNumber };
 
   } catch (error: any) {
     console.error("❌ FEEDBACK ERROR:", error.message || error);
@@ -337,8 +363,9 @@ export async function getInterviewById(id: string): Promise<any> {
 export async function getFeedbackByInterviewId(params: {
   interviewId: string;
   userId: string;
+  attempt?: number; // 🔥 NEW: Optional attempt number
 }): Promise<any> {
-  const { interviewId, userId } = params;
+  const { interviewId, userId, attempt } = params;
 
   // Add guard for undefined userId
   if (!userId) {
@@ -352,12 +379,17 @@ export async function getFeedbackByInterviewId(params: {
   }
 
   try {
-    const querySnapshot = await db
+    let query = db
       .collection("feedback")
       .where("interviewId", "==", interviewId)
-      .where("userId", "==", userId)
-      .limit(1)
-      .get();
+      .where("userId", "==", userId);
+
+    // 🔥 NEW: If specific attempt requested, filter by retakeNumber
+    if (attempt) {
+      query = query.where("retakeNumber", "==", attempt);
+    }
+
+    const querySnapshot = await query.limit(1).get();
 
     if (querySnapshot.empty) return null;
 
@@ -366,6 +398,35 @@ export async function getFeedbackByInterviewId(params: {
   } catch (error) {
     console.error("Error fetching feedback:", error);
     return null;
+  }
+}
+
+// 🔥 NEW: Get all feedback attempts for an interview
+export async function getAllFeedbackAttempts(params: {
+  interviewId: string;
+  userId: string;
+}): Promise<any[]> {
+  const { interviewId, userId } = params;
+
+  if (!userId || !interviewId) {
+    return [];
+  }
+
+  try {
+    const querySnapshot = await db
+      .collection("feedback")
+      .where("interviewId", "==", interviewId)
+      .where("userId", "==", userId)
+      .orderBy("retakeNumber", "asc")
+      .get();
+
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.error("Error fetching all feedback attempts:", error);
+    return [];
   }
 }
 
