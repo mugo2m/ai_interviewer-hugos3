@@ -1,4 +1,4 @@
-// components/Agent.tsx - COMPLETE FINAL VERSION WITH FIXED FEEDBACK FORMAT
+// components/Agent.tsx - COMPLETE FINAL VERSION WITH FIXED FEEDBACK REDIRECT
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -977,7 +977,7 @@ const Agent = ({
     };
   }, []);
 
-  // ============ FIXED FEEDBACK API CALL ============
+  // ============ FIXED FEEDBACK API CALL WITH FEEDBACK ID CAPTURE ============
   const callFeedbackAPI = async (interviewId: string, userId: string, answers: AnswerHistory[]) => {
     if (!interviewId || !userId || answers.length === 0) {
       console.log("⚠️ Cannot call feedback API - missing data");
@@ -1010,14 +1010,21 @@ const Agent = ({
 
       const data = await response.json();
       console.log("✅ Feedback API called successfully:", data);
-      return true;
+
+      // 🔥 NEW: Store the feedbackId for redirect
+      if (data.feedbackId) {
+        localStorage.setItem('lastFeedbackId', data.feedbackId);
+        console.log("💾 Stored feedbackId in localStorage:", data.feedbackId);
+      }
+
+      return data.feedbackId;
     } catch (error) {
       console.error("❌ Feedback API call failed:", error);
       return false;
     }
   };
 
-  // ============ INTERVIEW COMPLETION HANDLER - WITH CAPTURED ANSWERS ============
+  // ============ INTERVIEW COMPLETION HANDLER - WITH FIXED REDIRECT ============
   const handleInterviewCompletion = async (data: any, capturedAnswers?: AnswerHistory[]) => {
     // Use captured answers if provided, otherwise fall back to state
     const answersToUse = capturedAnswers || answerHistory;
@@ -1108,6 +1115,7 @@ const Agent = ({
         }
       }
 
+      let feedbackId = null;
       if (userId && (data.interviewId || interviewId) && answersToUse.length > 0) {
         console.log("🤖🤖🤖 CALLING FEEDBACK API WITH ANSWERS! 🤖🤖🤖");
         console.log("📤 Sending:", {
@@ -1116,7 +1124,7 @@ const Agent = ({
           answerCount: answersToUse.length
         });
 
-        await callFeedbackAPI(
+        feedbackId = await callFeedbackAPI(
           data.interviewId || interviewId,
           userId,
           answersToUse
@@ -1159,13 +1167,20 @@ const Agent = ({
       clearTimeout(redirectTimerRef.current);
     }
 
+    // 🔥 FIXED REDIRECT - Now uses feedbackId from API response
     redirectTimerRef.current = setTimeout(() => {
+      // Try to get feedbackId from multiple sources
+      const feedbackId = localStorage.getItem('lastFeedbackId');
       const targetInterviewId = data.interviewId || interviewId;
-      if (targetInterviewId) {
-        console.log("🚀 Redirecting to feedback page for interview:", targetInterviewId);
+
+      if (feedbackId) {
+        console.log("🚀 Redirecting to feedback page with ID:", feedbackId);
+        window.location.href = `/feedback/${feedbackId}`;
+      } else if (targetInterviewId) {
+        console.log("🚀 Redirecting to interview feedback page:", targetInterviewId);
         window.location.href = `/interview/${targetInterviewId}/feedback`;
       } else {
-        console.error("No interview ID available for redirect");
+        console.error("No ID available for redirect");
         window.location.href = '/';
       }
     }, 5000);
