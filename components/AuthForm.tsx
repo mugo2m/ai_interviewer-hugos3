@@ -182,165 +182,141 @@ const AuthForm = ({ type }: { type: FormType }) => {
   const isSignIn = type === "sign-in";
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
-      <div className="flex w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Left side - Image */}
-        <div className="hidden md:block md:w-1/2 relative bg-gradient-to-br from-primary-500 to-primary-700">
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-12">
-            <Image
-              src="/interview-panel.jpg"
-              alt="Interview preparation"
-              width={400}
-              height={400}
-              className="rounded-lg shadow-2xl mb-6 object-cover"
-            />
-            <h2 className="text-3xl font-bold text-center mb-4">Master Your Interviews</h2>
-            <p className="text-center text-white/90 text-lg">
-              Practice with AI-powered interviews and get instant feedback to improve your skills
-            </p>
-          </div>
+    <div className="card-border lg:min-w-[566px]">
+      <div className="flex flex-col gap-6 card py-14 px-10">
+        <div className="flex flex-row gap-2 justify-center">
+          <Image src="/logo.svg" alt="logo" height={32} width={38} />
+          <h2 className="text-primary-100">hugos</h2>
         </div>
 
-        {/* Right side - Form */}
-        <div className="w-full md:w-1/2 p-8">
-          <div className="card-border">
-            <div className="flex flex-col gap-6 card py-14 px-10">
-              <div className="flex flex-row gap-2 justify-center">
-                <Image src="/logo.svg" alt="logo" height={32} width={38} />
-                <h2 className="text-primary-100">hugos</h2>
-              </div>
+        <h3 className="text-center">Practice job interviews with AI</h3>
 
-              <h3 className="text-center">Practice job interviews with AI</h3>
+        {/* Method Selection Tabs - FIXED: Removed onValueChange */}
+        <Tabs defaultValue="email" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger
+              value="email"
+              onClick={() => setAuthMethod("email")}
+            >
+              📧 Email
+            </TabsTrigger>
+            <TabsTrigger
+              value="phone"
+              onClick={() => setAuthMethod("phone")}
+            >
+              📱 Phone (4-digit PIN)
+            </TabsTrigger>
+          </TabsList>
 
-              {/* Method Selection Tabs */}
-              <Tabs defaultValue="email" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger
-                    value="email"
-                    onClick={() => setAuthMethod("email")}
-                  >
-                    📧 Email
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="phone"
-                    onClick={() => setAuthMethod("phone")}
-                  >
-                    📱 Phone (4-digit PIN)
-                  </TabsTrigger>
-                </TabsList>
+          {/* Email Tab Content */}
+          <TabsContent value="email">
+            <Form {...emailForm}>
+              <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-6 mt-4">
+                {!isSignIn && (
+                  <FormField
+                    control={emailForm.control}
+                    name="name"
+                    label="Your Name"
+                    placeholder="Your Name"
+                    type="text"
+                  />
+                )}
 
-                {/* Email Tab Content */}
-                <TabsContent value="email">
-                  <Form {...emailForm}>
-                    <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-6 mt-4">
-                      {!isSignIn && (
-                        <FormField
-                          control={emailForm.control}
-                          name="name"
-                          label="Your Name"
-                          placeholder="Your Name"
-                          type="text"
-                        />
-                      )}
+                <FormField
+                  control={emailForm.control}
+                  name="email"
+                  label="Your email address"
+                  placeholder="Your email address"
+                  type="email"
+                />
 
-                      <FormField
-                        control={emailForm.control}
-                        name="email"
-                        label="Your email address"
-                        placeholder="Your email address"
-                        type="email"
-                      />
+                <FormField
+                  control={emailForm.control}
+                  name="password"
+                  label="Enter your password"
+                  placeholder="Enter your password"
+                  type="password"
+                />
 
-                      <FormField
-                        control={emailForm.control}
-                        name="password"
-                        label="Enter your password"
-                        placeholder="Enter your password"
-                        type="password"
-                      />
+                <Button className="btn w-full" type="submit">
+                  {isSignIn ? "Sign In with Email" : "Create Email Account"}
+                </Button>
+              </form>
+            </Form>
+          </TabsContent>
 
-                      <Button className="btn w-full" type="submit">
-                        {isSignIn ? "Sign In with Email" : "Create Email Account"}
-                      </Button>
-                    </form>
-                  </Form>
-                </TabsContent>
+          {/* Phone Tab Content */}
+          <TabsContent value="phone">
+            <Form {...phoneForm}>
+              <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-6 mt-4">
+                {!isSignIn && (
+                  <FormField
+                    control={phoneForm.control}
+                    name="name"
+                    label="Your Name"
+                    placeholder="Your Name"
+                    type="text"
+                  />
+                )}
 
-                {/* Phone Tab Content */}
-                <TabsContent value="phone">
-                  <Form {...phoneForm}>
-                    <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-6 mt-4">
-                      {!isSignIn && (
-                        <FormField
-                          control={phoneForm.control}
-                          name="name"
-                          label="Your Name"
-                          placeholder="Your Name"
-                          type="text"
-                        />
-                      )}
+                {/* Phone Number with Country Code */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Phone Number</label>
+                  <div className="flex gap-2">
+                    <select
+                      {...phoneForm.register('countryCode')}
+                      className="w-28 px-3 py-2 border rounded-md bg-white dark:bg-gray-800"
+                    >
+                      {countryCodes.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.flag} {country.code}
+                        </option>
+                      ))}
+                    </select>
 
-                      {/* Phone Number with Country Code */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Phone Number</label>
-                        <div className="flex gap-2">
-                          <select
-                            {...phoneForm.register('countryCode')}
-                            className="w-28 px-3 py-2 border rounded-md bg-white dark:bg-gray-800"
-                          >
-                            {countryCodes.map((country) => (
-                              <option key={country.code} value={country.code}>
-                                {country.flag} {country.code}
-                              </option>
-                            ))}
-                          </select>
+                    <Input
+                      type="tel"
+                      placeholder="712345678"
+                      {...phoneForm.register('phoneNumber')}
+                      className="flex-1"
+                      maxLength={15}
+                    />
+                  </div>
+                </div>
 
-                          <Input
-                            type="tel"
-                            placeholder="712345678"
-                            {...phoneForm.register('phoneNumber')}
-                            className="flex-1"
-                            maxLength={15}
-                          />
-                        </div>
-                      </div>
+                {/* 4-digit PIN */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">4-Digit PIN</label>
+                  <Input
+                    type="password"
+                    placeholder="3846"
+                    {...phoneForm.register('pin')}
+                    maxLength={4}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Enter a 4-digit number (e.g., 3846)
+                  </p>
+                </div>
 
-                      {/* 4-digit PIN */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">4-Digit PIN</label>
-                        <Input
-                          type="password"
-                          placeholder="3846"
-                          {...phoneForm.register('pin')}
-                          maxLength={4}
-                          className="w-full"
-                        />
-                        <p className="text-xs text-gray-500">
-                          Enter a 4-digit number (e.g., 3846)
-                        </p>
-                      </div>
+                <Button className="btn w-full" type="submit">
+                  {isSignIn ? "Sign In with Phone" : "Create Phone Account"}
+                </Button>
+              </form>
+            </Form>
+          </TabsContent>
+        </Tabs>
 
-                      <Button className="btn w-full" type="submit">
-                        {isSignIn ? "Sign In with Phone" : "Create Phone Account"}
-                      </Button>
-                    </form>
-                  </Form>
-                </TabsContent>
-              </Tabs>
-
-              {/* Toggle between sign-in and sign-up */}
-              <p className="text-center">
-                {isSignIn ? "Don't have an account?" : "Already have an account?"}
-                <Link
-                  href={!isSignIn ? "/sign-in" : "/sign-up"}
-                  className="font-bold text-user-primary ml-1"
-                >
-                  {!isSignIn ? "Sign In" : "Sign Up"}
-                </Link>
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* Toggle between sign-in and sign-up */}
+        <p className="text-center">
+          {isSignIn ? "Don't have an account?" : "Already have an account?"}
+          <Link
+            href={!isSignIn ? "/sign-in" : "/sign-up"}
+            className="font-bold text-user-primary ml-1"
+          >
+            {!isSignIn ? "Sign In" : "Sign Up"}
+          </Link>
+        </p>
       </div>
     </div>
   );
