@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/general.action";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { signOut } from "@/lib/actions/auth.action"; // ADD THIS IMPORT
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -235,6 +236,19 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
             </p>
           </Link>
         </Button>
+
+        {/* 🔥 NEW LOGOUT BUTTON - Added after Retake Interview */}
+        <form action={async () => {
+          'use server';
+          await signOut();
+          redirect('/sign-in');
+        }}>
+          <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white flex-1">
+            <p className="text-sm font-semibold text-center">
+              Log Out
+            </p>
+          </Button>
+        </form>
       </div>
     </section>
   );
