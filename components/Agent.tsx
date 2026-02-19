@@ -1,4 +1,4 @@
-// components/Agent.tsx - COMPLETE FINAL VERSION WITH FIXED FEEDBACK REDIRECT
+// components/Agent.tsx - COMPLETE FINAL VERSION WITH FIXED REDIRECT
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -1167,20 +1167,15 @@ const Agent = ({
       clearTimeout(redirectTimerRef.current);
     }
 
-    // 🔥 FIXED REDIRECT - Now uses feedbackId from API response
+    // 🔥 FIXED REDIRECT - Always use interview ID
     redirectTimerRef.current = setTimeout(() => {
-      // Try to get feedbackId from multiple sources
-      const feedbackId = localStorage.getItem('lastFeedbackId');
       const targetInterviewId = data.interviewId || interviewId;
 
-      if (feedbackId) {
-        console.log("🚀 Redirecting to feedback page with ID:", feedbackId);
-        window.location.href = `/feedback/${feedbackId}`;
-      } else if (targetInterviewId) {
-        console.log("🚀 Redirecting to interview feedback page:", targetInterviewId);
+      if (targetInterviewId) {
+        console.log("🚀 Redirecting to feedback page for interview:", targetInterviewId);
         window.location.href = `/interview/${targetInterviewId}/feedback`;
       } else {
-        console.error("No ID available for redirect");
+        console.error("No interview ID available for redirect");
         window.location.href = '/';
       }
     }, 5000);
